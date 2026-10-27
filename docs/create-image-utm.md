@@ -134,8 +134,9 @@ The Ubuntu templates only define an `azure-arm` source, so `scripts/ubuntu/gener
 - the build uses a `null` source that connects to the UTM VM over SSH
 - the final `waagent -force -deprovision+user` is dropped. It needs the Azure agent and would delete the build user
 - the software report is downloaded to `images/image-output` of the sources instead of over the committed readme
-- the PowerShell module step runs `Install-PowerShellModules.ps1` and `Install-PowerShellAzModules.ps1` through `scripts/ubuntu/Install-PowerShellModulesWithRetry.ps1`, which retries every `Install-Module`, `Update-Module` and `Save-Module` call up to 5 times.
-  The PowerShell Gallery answers a few percent of requests with 404 ("Unable to resolve package source", "No match was found", "Source Location ... is not valid"), and with dozens of modules one of them almost always hits a build.
+- the PowerShell module step runs `Install-PowerShellModules.ps1` and `Install-PowerShellAzModules.ps1` through `scripts/ubuntu/Install-PowerShellModulesWithRetry.ps1`, which wraps every `Install-Module`, `Update-Module` and `Save-Module` call of those scripts in a retry, up to 10 attempts 30 seconds apart.
+  Since 2026-10-26 the PowerShell Gallery answers a few percent of requests with 404 ("Unable to resolve package source", "No match was found", "Source Location ... is not valid", see [PowerShell/PowerShellGallery#356](https://github.com/PowerShell/PowerShellGallery/issues/356)).
+  Az and Microsoft.Graph pull about a hundred sub-modules each, so one failed request would end almost every build.
   The whole step is also retried up to 3 times; both scripts can run again safely
 
 The script fails when an upstream change to the template makes this rewrite incomplete, rather than build something different from the template.
