@@ -13,9 +13,17 @@ In every case the install scripts, tests and software reports come from the same
 
 ## Requirements
 
+`scripts/install-prerequisites.sh` installs everything the scripts need, and only what is missing: the Xcode Command Line Tools, Homebrew, and, depending on the images, UTM, Packer, QEMU, and Docker with Colima. Use `--for macos,ubuntu,ubuntu-slim,runner` to prepare only some of them, and `--dry-run` to see what is missing without installing anything.
+
+```bash
+./scripts/install-prerequisites.sh
+```
+
+What you need:
+
 - A Mac with Apple silicon. UTM runs arm64 guests with hardware virtualization; x64 guests would be emulated, which is far too slow for an image build
 - [UTM](https://mac.getutm.app/) 5.0.8 or later in `/Applications`. Set `UTMCTL` if `utmctl` lives elsewhere
-- [Packer](https://developer.hashicorp.com/packer/install), for example `brew install packer`
+- [Packer](https://developer.hashicorp.com/packer/install), from the HashiCorp tap: `brew install hashicorp/tap/packer`
 - Disk space: VM disks are sparse and only take the space that is used, but a full image still needs from about 50 GB (Ubuntu) to a few hundred GB (macOS with several Xcode versions)
 
 > [!IMPORTANT]

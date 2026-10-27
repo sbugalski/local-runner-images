@@ -31,6 +31,8 @@ Because the default branch does not always build, the scripts build the newest r
 
 To use a built image as a self-hosted runner, [`scripts/run-ephemeral-runner.sh`](scripts/run-ephemeral-runner.sh) registers ephemeral runners to a repository and runs every job on a fresh clone of the image.
 
+[`scripts/install-prerequisites.sh`](scripts/install-prerequisites.sh) installs the software the scripts need on the Mac.
+
 See [Build and run runner images locally with UTM](docs/create-image-utm.md) for requirements, step-by-step instructions and the reasons some images are not supported.
 
 ## Available Images
