@@ -187,7 +187,8 @@ stop_vm() {
 vm_mac_address() {
     utm_osascript '
             set vm to virtual machine named (item 1 of argv)
-            return address of item 1 of (network interfaces of (configuration of vm))' "$1"
+            set config to configuration of vm
+            return address of item 1 of network interfaces of config' "$1"
 }
 
 # Looks up the IPv4 address of a VM in the vmnet DHCP leases. The leases file
