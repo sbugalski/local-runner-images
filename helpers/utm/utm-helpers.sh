@@ -68,7 +68,7 @@ resolve_image_tag() {
         tags=$(git ls-remote --tags --refs "$SOURCE_REPO" "refs/tags/$image/*") || fail "Could not list the tags of $SOURCE_REPO"
         tag=$(echo "$tags" | awk '{ sub("refs/tags/", "", $2); print $2 }' | select_latest_tag "$image")
         if [[ -z "$tag" ]]; then
-            fail "No release tags for '$image' in $SOURCE_REPO. Use --repo upstream, or copy the release tags to the fork:
+            fail "No release tags for '$image' in $SOURCE_REPO. Use --repo upstream, run the 'Sync upstream release tags' workflow of the fork, or copy the tags yourself:
     git fetch $UPSTREAM_REPO 'refs/tags/$image/*:refs/tags/$image/*' && git push origin 'refs/tags/$image/*'"
         fi
     elif [[ "$tag" != */* ]]; then

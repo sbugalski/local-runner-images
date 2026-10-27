@@ -38,13 +38,20 @@ All three build scripts take the same options:
 
 The script clones the sources at the tag once (a shallow clone of a few MB) into `~/Library/Caches/local-runner-images/sources` and uses the release version as the image version and in the default VM name, for example `macos-26-arm64-20261021.0445`. The UTM scripts themselves always come from this checkout.
 
-> [!NOTE]
-> GitHub does not copy new upstream tags into a fork. When the fork has no release tag for an image, the script stops and prints the command that copies the tags of that image from `actions/runner-images` to the fork, for example:
->
-> ```bash
-> git fetch https://github.com/actions/runner-images.git 'refs/tags/ubuntu24-arm64/*:refs/tags/ubuntu24-arm64/*'
-> git push origin 'refs/tags/ubuntu24-arm64/*'
-> ```
+### Keep the fork's release tags up to date
+
+GitHub does not copy new upstream tags into a fork. The **Sync upstream release tags** workflow (`.github/workflows/sync-upstream-tags.yml`) does it every day: it fetches the release tags of the images in the table above from `actions/runner-images` and pushes the ones the fork does not have yet. To run it right away, start it from the **Actions** tab (**Run workflow**).
+
+> [!IMPORTANT]
+> The default `GITHUB_TOKEN` cannot push commits that change files in `.github/workflows`, and new upstream commits often do.
+> When the workflow fails with "refusing to allow a GitHub App to create or update workflow", create a fine-grained personal access token for the fork with **Contents: Read and write** and **Workflows: Read and write**, and store it as the repository secret `TAGS_SYNC_TOKEN`. The workflow uses it when it is set.
+
+GitHub turns off scheduled workflows in a fork until you enable Actions for it, and in public repositories after 60 days without activity. When the fork has no release tag for an image, the build script stops and prints the command that copies the tags of that image by hand, for example:
+
+```bash
+git fetch https://github.com/actions/runner-images.git 'refs/tags/ubuntu24-arm64/*:refs/tags/ubuntu24-arm64/*'
+git push origin 'refs/tags/ubuntu24-arm64/*'
+```
 
 ## macOS images
 
