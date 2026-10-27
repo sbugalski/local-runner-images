@@ -2,7 +2,7 @@
 ################################################################################
 ##  File:  utm-helpers.sh
 ##  Desc:  Helper functions to drive UTM virtual machines from the macOS host.
-##         Sourced by create-base-vm.sh and build-image.sh.
+##         Sourced by the scripts in images/macos/utm and images/ubuntu/utm.
 ##         Written for the bash 3.2 that ships with macOS.
 ################################################################################
 
@@ -37,7 +37,7 @@ version_ge() {
 
 assert_host() {
     [[ "$(uname -s)" == "Darwin" ]] || fail "UTM builds run on a macOS host only"
-    [[ "$(uname -m)" == "arm64" ]] || fail "macOS guests in UTM require an Apple silicon host"
+    [[ "$(uname -m)" == "arm64" ]] || fail "UTM builds of the runner images require an Apple silicon host"
     [[ -x "$UTMCTL" ]] || fail "utmctl not found at '$UTMCTL'. Install UTM or set UTMCTL"
 
     local version
@@ -150,6 +150,28 @@ wait_ssh() {
         sleep 10
         waited=$((waited + 10))
     done
+}
+
+# Starts the VM again whenever it is found stopped, until stop_vm_watchdog.
+# Covers guest reboots during the build that end with the VM stopped
+start_vm_watchdog() {
+    local name=$1
+    (
+        while sleep 15; do
+            if [[ "$(vm_status "$name" 2>/dev/null)" == "stopped" ]]; then
+                echo "==> VM '$name' stopped during the build, starting it again" >&2
+                "$UTMCTL" start "$name" >&2 || true
+            fi
+        done
+    ) &
+    VM_WATCHDOG_PID=$!
+}
+
+stop_vm_watchdog() {
+    if [[ -n "$VM_WATCHDOG_PID" ]]; then
+        kill "$VM_WATCHDOG_PID" 2>/dev/null || true
+        VM_WATCHDOG_PID=""
+    fi
 }
 
 # Starts a VM and prints its IP address once SSH accepts connections

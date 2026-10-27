@@ -4,12 +4,12 @@
 ##  Desc:  Builds a macOS runner image in UTM. Clones the base VM created by
 ##         create-base-vm.sh and provisions the clone with the regular image
 ##         template through the Packer 'null' builder.
-##  Usage: see docs/create-macos-image-utm.md or run with --help
+##  Usage: see docs/create-image-utm.md or run with --help
 ################################################################################
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 TEMPLATES_DIR=$(cd "$SCRIPT_DIR/../templates" && pwd)
-source "$SCRIPT_DIR/utm-helpers.sh"
+source "$SCRIPT_DIR/../../../helpers/utm/utm-helpers.sh"
 
 usage() {
     cat <<EOF
@@ -82,6 +82,7 @@ server_pid=""
 build_succeeded=false
 
 cleanup() {
+    stop_vm_watchdog
     [[ -n "$server_pid" ]] && kill "$server_pid" 2>/dev/null || true
     if [[ "$build_succeeded" != true ]] && vm_exists "$name"; then
         if [[ "$keep_on_failure" == true ]]; then
@@ -115,8 +116,10 @@ if [[ -n "$xcode_dir" ]]; then
     xcode_url="http://$host_ip:$port/"
 fi
 
+mkdir -p "$TEMPLATES_DIR/../../image-output"
 cd "$TEMPLATES_DIR"
 packer init "$template"
+start_vm_watchdog "$name"
 PKR_VAR_vm_password="$UTM_VM_PASSWORD" \
 PKR_VAR_github_api_pat="$GITHUB_API_PAT" \
 PKR_VAR_xcode_install_sas="$XCODE_INSTALL_SAS" \
@@ -128,6 +131,7 @@ packer build \
     -var "xcode_install_storage_url=$xcode_url" \
     "$template"
 
+stop_vm_watchdog
 stop_vm "$name"
 build_succeeded=true
 

@@ -4,11 +4,11 @@
 ##  Desc:  Creates a macOS base VM in UTM from an IPSW restore image.
 ##         The base VM plays the role of the Anka source VM: it is cloned by
 ##         build-image.sh for every image build.
-##  Usage: see docs/create-macos-image-utm.md or run with --help
+##  Usage: see docs/create-image-utm.md or run with --help
 ################################################################################
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-source "$SCRIPT_DIR/utm-helpers.sh"
+source "$SCRIPT_DIR/../../../helpers/utm/utm-helpers.sh"
 
 usage() {
     cat <<EOF

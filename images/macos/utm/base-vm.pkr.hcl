@@ -1,6 +1,6 @@
 // Prepares a freshly installed UTM macOS VM so it can serve as the source VM
 // for the macOS image templates (builder_type = "null").
-// Run by create-base-vm.sh, see docs/create-macos-image-utm.md.
+// Run by create-base-vm.sh, see docs/create-image-utm.md.
 
 variable "vm_host" {
   type = string

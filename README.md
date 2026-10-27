@@ -15,7 +15,7 @@
 
 This repository contains the source code used to create the VM images for [GitHub-hosted runners](https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners) used for Actions, as well as for [Microsoft-hosted agents](https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/hosted?view=azure-devops#use-a-microsoft-hosted-agent) used for Azure Pipelines.
 To build a VM machine from this repo's source, see the [instructions](docs/create-image-and-azure-resources.md).
-To build the arm64 macOS images on your own Apple silicon Mac and run them in UTM, see [Build and run macOS images locally with UTM](docs/create-macos-image-utm.md).
+To build the arm64 macOS and Ubuntu images on your own Apple silicon Mac and run them in UTM, see [Build and run runner images locally with UTM](docs/create-image-utm.md).
 
 ## Available Images
 
