@@ -9,6 +9,7 @@ on:
       - '**.json'
       - '**.md'
       - '**.sh'
+      - 'images.CI/shebang-linter.ps1'
 
 jobs:
   build:
