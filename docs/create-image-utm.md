@@ -23,6 +23,29 @@ In every case the install scripts, tests and software reports come from the same
 
 The scripts are written for the bash 3.2 that ships with macOS. Shared functions live in `helpers/utm/utm-helpers.sh`.
 
+## Choose the release to build
+
+The default branch of `actions/runner-images` can be in a state that does not build, so the scripts build from a release tag by default, not from the files next to them. A release tag has the form `<image>/<YYYYMMDD>.<build>`, for example `macos-26-arm64/20261021.0445` or `ubuntu24-arm64/20261026.166`.
+
+All three build scripts take the same options:
+
+| Option | Effect |
+| ------ | ------ |
+| none | Build the newest release tag of the image from the fork, `sbugalski/local-runner-images` |
+| `--repo upstream` | Take the tags from `actions/runner-images` instead. `--repo` also accepts any git URL |
+| `--tag TAG` | Build this release, as a full tag or as the version only, for example `--tag 20261021.0445` |
+| `--from-checkout` | Build from this checkout, for example to test changes to the templates |
+
+The script clones the sources at the tag once (a shallow clone of a few MB) into `~/Library/Caches/local-runner-images/sources` and uses the release version as the image version and in the default VM name, for example `macos-26-arm64-20261021.0445`. The UTM scripts themselves always come from this checkout.
+
+> [!NOTE]
+> GitHub does not copy new upstream tags into a fork. When the fork has no release tag for an image, the script stops and prints the command that copies the tags of that image from `actions/runner-images` to the fork, for example:
+>
+> ```bash
+> git fetch https://github.com/actions/runner-images.git 'refs/tags/ubuntu24-arm64/*:refs/tags/ubuntu24-arm64/*'
+> git push origin 'refs/tags/ubuntu24-arm64/*'
+> ```
+
 ## macOS images
 
 The macOS templates support a Packer `null` builder next to Anka. `build-image.sh` uses it against a clone of a base VM that you create once per macOS version:
@@ -63,7 +86,8 @@ The script waits until the VM shuts down after each step. Finally it connects ov
 
 ### Step 2: Provide Xcode
 
-`Install-Xcode.ps1` downloads `<storage URL>Xcode-<version>.xip?<SAS>` for every Xcode version in the toolset and checks the SHA-256 sum from the toolset. `<version>` is the `version` field under `xcode.arm64.versions` in `images/macos/toolsets/toolset-*.json`, for example `Xcode-26.6+17F113.xip`.
+`Install-Xcode.ps1` downloads `<storage URL>Xcode-<version>.xip?<SAS>` for every Xcode version in the toolset and checks the SHA-256 sum from the toolset. `<version>` is the `version` field under `xcode.arm64.versions` in `images/macos/toolsets/toolset-*.json` of the release you build, for example `Xcode-26.6+17F113.xip`.
+The Xcode versions change between releases; `build-image.sh` prints the files the release needs and, with `--xcode-dir`, stops before the build when one is missing.
 
 Download the archives from [Apple Developer](https://developer.apple.com/download/all/?q=xcode) and rename them to that pattern. Then choose one option:
 
@@ -86,7 +110,7 @@ export GITHUB_API_PAT='<optional token, avoids GitHub API rate limits>'
     --xcode-dir ~/Downloads/xcode
 ```
 
-The script clones the base VM to `--name` (default `<image>-<timestamp>`), starts the clone, waits for SSH, runs `packer build` with `builder_type=null` and shuts the VM down.
+The script clones the base VM to `--name` (default `<image>-<release version>`), starts the clone, waits for SSH, runs `packer build` with `builder_type=null` and shuts the VM down.
 
 ## Ubuntu images
 
@@ -94,7 +118,7 @@ The Ubuntu templates only define an `azure-arm` source, so `scripts/ubuntu/gener
 
 - the build uses a `null` source that connects to the UTM VM over SSH
 - the final `waagent -force -deprovision+user` is dropped. It needs the Azure agent and would delete the build user
-- the software report is downloaded to `images/image-output` instead of over the committed readme
+- the software report is downloaded to `images/image-output` of the sources instead of over the committed readme
 
 The script fails when an upstream change to the template makes this rewrite incomplete, rather than build something different from the template.
 
@@ -133,7 +157,7 @@ export GITHUB_TOKEN='<optional token, avoids GitHub API rate limits>'
 ./scripts/ubuntu-slim/build-macos.sh
 ```
 
-The script builds `ubuntu-slim:test` for `linux/amd64` and runs `images/ubuntu-slim/test.sh` against it. Pass another image name as the first argument to tag the image differently.
+The script builds `ubuntu-slim:<release version>` for `linux/amd64` and runs `images/ubuntu-slim/test.sh` of the release against it. Pass `--name` to tag the image differently.
 
 ## Unsupported images
 

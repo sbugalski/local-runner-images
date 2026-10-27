@@ -20,6 +20,7 @@ To build a VM machine from this repo's source, see the [instructions](docs/creat
 
 This is a fork of [actions/runner-images](https://github.com/actions/runner-images) that adds local builds: you can build the runner images on your own Apple silicon Mac, without Azure or Anka, and run them as VMs in [UTM](https://mac.getutm.app/).
 The local builds use the upstream image templates, install scripts and tests; only the steps that create the VM and connect to it are replaced (for Ubuntu, through a generated copy of the template without the Azure-specific steps). The same tests run during the local build as on the hosted images.
+Because the default branch does not always build, the scripts build the newest release tag of each image by default, taken from this fork or, with `--repo upstream`, from actions/runner-images.
 
 | Image | Local build | Scripts |
 | ----- | ----------- | ------- |

@@ -1,19 +1,29 @@
 #!/bin/bash -e -o pipefail
 ################################################################################
 ##  File:  utm-helpers.sh
-##  Desc:  Helper functions to drive UTM virtual machines from the macOS host.
-##         Sourced by the scripts in scripts/macos and scripts/ubuntu.
+##  Desc:  Helper functions for local image builds on the macOS host: picking
+##         the upstream release to build and driving UTM virtual machines.
+##         Sourced by the scripts in scripts/.
 ##         Written for the bash 3.2 that ships with macOS.
 ################################################################################
 
 UTMCTL="${UTMCTL:-/Applications/UTM.app/Contents/MacOS/utmctl}"
 
+# Images are built from the sources of a release tag, because the default
+# branch can be in a state that does not build. Tags come from the fork by
+# default, or from the original repository (--repo upstream)
+FORK_REPO="https://github.com/sbugalski/local-runner-images.git"
+UPSTREAM_REPO="https://github.com/actions/runner-images.git"
+SOURCE_REPO="${SOURCE_REPO:-$FORK_REPO}"
+SOURCE_CACHE_DIR="${SOURCE_CACHE_DIR:-$HOME/Library/Caches/local-runner-images/sources}"
+
 # Oldest UTM release whose scripting API (macOS install, recovery boot,
 # ip-address for Apple VMs) these scripts were written against
 UTM_MIN_VERSION="5.0.8"
 
+# Progress goes to stderr, so functions can print their result on stdout
 log() {
-    echo "==> $*"
+    echo "==> $*" >&2
 }
 
 fail() {
@@ -33,6 +43,72 @@ version_ge() {
         if (( l < r )); then return 1; fi
     done
     return 0
+}
+
+# Reads tags from stdin and prints the newest release tag of image $1.
+# Release tags look like <image>/<YYYYMMDD>.<build>, e.g. ubuntu24-arm64/20261026.166
+select_latest_tag() {
+    grep -E "^$1/[0-9]{8}\.[0-9]+$" | sort -t. -k1,1 -k2,2n | tail -n 1 || true
+}
+
+# Sets SOURCE_REPO from the --repo option: fork, upstream or a git URL
+set_source_repo() {
+    case "$1" in
+        ""|fork) SOURCE_REPO=$FORK_REPO ;;
+        upstream) SOURCE_REPO=$UPSTREAM_REPO ;;
+        *) SOURCE_REPO=$1 ;;
+    esac
+}
+
+# Prints the release tag to build for image $1: $2 when given, with or without
+# the image prefix, otherwise the newest release tag in SOURCE_REPO
+resolve_image_tag() {
+    local image=$1 tag=$2 tags
+    if [[ -z "$tag" ]]; then
+        tags=$(git ls-remote --tags --refs "$SOURCE_REPO" "refs/tags/$image/*") || fail "Could not list the tags of $SOURCE_REPO"
+        tag=$(echo "$tags" | awk '{ sub("refs/tags/", "", $2); print $2 }' | select_latest_tag "$image")
+        if [[ -z "$tag" ]]; then
+            fail "No release tags for '$image' in $SOURCE_REPO. Use --repo upstream, or copy the release tags to the fork:
+    git fetch $UPSTREAM_REPO 'refs/tags/$image/*:refs/tags/$image/*' && git push origin 'refs/tags/$image/*'"
+        fi
+    elif [[ "$tag" != */* ]]; then
+        tag="$image/$tag"
+    fi
+    [[ "$tag" == "$image/"* ]] || fail "Tag '$tag' is not a release of '$image'"
+    echo "$tag"
+}
+
+# Prints a directory with the sources of SOURCE_REPO at release tag $1, cloned on first use
+image_source_at_tag() {
+    local tag=$1 repo_key
+    # e.g. github.com_actions_runner-images, so tags of different repositories do not mix
+    repo_key=$(echo "${SOURCE_REPO#*://}" | sed -e 's|\.git$||' -e 's|[/:@]|_|g')
+    local dir="$SOURCE_CACHE_DIR/$repo_key/${tag//\//_}"
+    if [[ ! -d "$dir/.git" ]]; then
+        log "Fetching $SOURCE_REPO at $tag"
+        mkdir -p "$(dirname "$dir")"
+        git -c advice.detachedHead=false clone --quiet --depth 1 --branch "$tag" "$SOURCE_REPO" "$dir" >&2 \
+            || fail "Could not fetch tag '$tag' from $SOURCE_REPO"
+    fi
+    echo "$dir"
+}
+
+# Sets SOURCE_DIR, and SOURCE_VERSION to the release version (e.g. 20261026.166),
+# for image $1: this repository with --from-checkout ($3 = true), otherwise release tag $2 or the newest one
+# shellcheck disable=SC2034 # SOURCE_DIR and SOURCE_VERSION are read by the calling script
+resolve_image_source() {
+    local image=$1 tag=$2 from_checkout=$3
+    if [[ "$from_checkout" == true ]]; then
+        [[ -z "$tag" ]] || fail "Use either --tag or --from-checkout, not both"
+        SOURCE_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)
+        SOURCE_VERSION=""
+        log "Building from this repository at $SOURCE_DIR"
+    else
+        tag=$(resolve_image_tag "$image" "$tag")
+        SOURCE_DIR=$(image_source_at_tag "$tag")
+        SOURCE_VERSION=${tag#*/}
+        log "Building from release $tag of $SOURCE_REPO"
+    fi
 }
 
 assert_host() {

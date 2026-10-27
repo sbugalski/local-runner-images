@@ -8,14 +8,17 @@
 ##         - the final 'waagent -deprovision+user' is dropped, it would delete
 ##           the build user and needs the Azure agent
 ##         - downloaded software reports go to images/image-output
-##  Usage: generate-template.sh <build name>, e.g. ubuntu-24_04-arm64
+##  Usage: generate-template.sh <build name> [source dir]
+##         <build name> is e.g. ubuntu-24_04-arm64, [source dir] the root of
+##         the runner-images sources (default: this repository).
 ##         Prints the directory of the generated template.
 ################################################################################
 
 set -o pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-TEMPLATES_DIR=$(cd "$SCRIPT_DIR/../../images/ubuntu/templates" && pwd)
+SOURCE_DIR=$(cd "${2:-$SCRIPT_DIR/../..}" && pwd)
+TEMPLATES_DIR="$SOURCE_DIR/images/ubuntu/templates"
 # A sibling of templates/, so ${path.root}/../scripts still resolves
 OUTPUT_DIR="$TEMPLATES_DIR/../.utm-template"
 

@@ -5,6 +5,9 @@
 ##         Creates a VM from the Ubuntu cloud image, configures access with
 ##         cloud-init and provisions it with the regular image template
 ##         through the Packer 'null' builder (see generate-template.sh).
+##         The template comes from the newest release tag of the image in the
+##         fork (or the original repository with --repo upstream), unless --tag
+##         or --from-checkout says otherwise.
 ##  Usage: see docs/create-image-utm.md or run with --help
 ################################################################################
 
@@ -21,7 +24,12 @@ Required:
   --image IMAGE        One of: ubuntu-22.04-arm64, ubuntu-24.04-arm64, ubuntu-26.04-arm64
 
 Options:
-  --name NAME          Name of the new VM (default: <image>-<timestamp>)
+  --repo REPO          Where to take release tags from: fork (default), upstream
+                       (actions/runner-images) or a git URL
+  --tag TAG            Release to build, e.g. ubuntu24-arm64/20261026.166 or
+                       20261026.166 (default: the newest release of the image)
+  --from-checkout      Build from this checkout instead of a release tag
+  --name NAME          Name of the new VM (default: <image>-<release version>)
   --username USER      Account created by cloud-init (default: runner)
   --ssh-key PATH       Private SSH key for the account; PATH.pub must exist
                        (default: ~/.ssh/utm-runner-images, generated if missing)
@@ -40,10 +48,14 @@ cpu=4
 memory=16384
 disk=100
 keep_on_failure=false
+from_checkout=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --image) image=$2; shift 2 ;;
+        --repo) set_source_repo "$2"; shift 2 ;;
+        --tag) tag=$2; shift 2 ;;
+        --from-checkout) from_checkout=true; shift ;;
         --name) name=$2; shift 2 ;;
         --username) username=$2; shift 2 ;;
         --ssh-key) ssh_key=$2; shift 2 ;;
@@ -65,9 +77,10 @@ case "$image" in
 esac
 
 [[ "$username" =~ ^[a-z_][a-z0-9_-]*$ ]] || fail "--username must be a short POSIX account name, e.g. 'runner'"
-name=${name:-$image-$(date +%Y%m%d%H%M)}
 
 assert_host
+resolve_image_source "$image_os" "$tag" "$from_checkout"
+name=${name:-$image-${SOURCE_VERSION:-$(date +%Y%m%d%H%M)}}
 for tool in packer qemu-img hdiutil curl shasum ssh-keygen nc; do
     assert_command "$tool"
 done
@@ -158,8 +171,8 @@ log "Starting VM '$name'"
 ip=$(start_vm_and_wait_ssh "$name")
 log "VM is reachable at $ip"
 
-template_dir=$("$SCRIPT_DIR/generate-template.sh" "$build_name")
-mkdir -p "$SCRIPT_DIR/../../images/image-output"
+template_dir=$("$SCRIPT_DIR/generate-template.sh" "$build_name" "$SOURCE_DIR")
+mkdir -p "$SOURCE_DIR/images/image-output"
 cd "$template_dir"
 start_vm_watchdog "$name"
 packer build \
@@ -167,7 +180,7 @@ packer build \
     -var "utm_vm_username=$username" \
     -var "utm_ssh_private_key_file=$ssh_key" \
     -var "image_os=$image_os" \
-    -var "image_version=$name" \
+    -var "image_version=${SOURCE_VERSION:-$name}" \
     .
 
 stop_vm_watchdog
@@ -182,4 +195,4 @@ if [[ -n "$export_path" ]]; then
 fi
 
 log "Image '$name' is ready in UTM. Connect with: ssh -i $ssh_key $username@<ip>"
-log "Software report: $(cd "$SCRIPT_DIR/../../images/image-output" && pwd)/"
+log "Software report: $SOURCE_DIR/images/image-output/"

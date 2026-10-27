@@ -62,6 +62,34 @@ assert_equal "lease lookup prints nothing for an unknown MAC" \
 assert_equal "lease lookup prints nothing without a leases file" \
     "" "$(ip_from_dhcp_leases "02:0a:3f:04:5b:60" "/nonexistent/dhcpd_leases")"
 
+tags="ubuntu24-arm64/20261012.149
+ubuntu24-arm64/20261026.166
+ubuntu24-arm64/20261026.99
+ubuntu24-arm64/20261023.149
+ubuntu24-arm64-test/20261030.1
+ubuntu24-arm64/latest
+ubuntu24/20261030.1"
+assert_equal "latest tag is the newest date, then the highest build number" \
+    "ubuntu24-arm64/20261026.166" "$(echo "$tags" | select_latest_tag "ubuntu24-arm64")"
+assert_equal "latest tag ignores other images and non-release tags" \
+    "ubuntu24/20261030.1" "$(echo "$tags" | select_latest_tag "ubuntu24")"
+assert_equal "latest tag prints nothing without releases" \
+    "" "$(echo "$tags" | select_latest_tag "macos-26-arm64")"
+
+assert_equal "explicit version gets the image prefix" \
+    "macos-26-arm64/20261021.0445" "$(resolve_image_tag "macos-26-arm64" "20261021.0445")"
+assert_equal "explicit full tag is kept" \
+    "macos-26-arm64/20261021.0445" "$(resolve_image_tag "macos-26-arm64" "macos-26-arm64/20261021.0445")"
+assert_equal "a tag of another image is rejected" \
+    "rejected" "$( (resolve_image_tag "macos-26-arm64" "ubuntu24-arm64/20261026.166" 2>/dev/null) || echo rejected)"
+
+set_source_repo ""
+assert_equal "tags come from the fork by default" "$FORK_REPO" "$SOURCE_REPO"
+set_source_repo upstream
+assert_equal "--repo upstream uses actions/runner-images" "$UPSTREAM_REPO" "$SOURCE_REPO"
+set_source_repo "https://example.com/runner-images.git"
+assert_equal "--repo accepts a git URL" "https://example.com/runner-images.git" "$SOURCE_REPO"
+
 if (( failures > 0 )); then
     echo "$failures test(s) failed"
     exit 1
