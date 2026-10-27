@@ -165,7 +165,7 @@ build_succeeded=true
 if [[ -n "$export_path" ]]; then
     log "Exporting '$name' to $export_path"
     mkdir -p "$(dirname "$export_path")"
-    utm_osascript 'export (virtual machine named (item 1 of argv)) to (POSIX file (item 2 of argv))' \
+    utm_osascript 'export (virtual machine named (item 1 of argv)) to ((item 2 of argv) as POSIX file)' \
         "$name" "$(cd "$(dirname "$export_path")" && pwd)/$(basename "$export_path")"
 fi
 

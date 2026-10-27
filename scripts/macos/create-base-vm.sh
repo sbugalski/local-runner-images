@@ -77,7 +77,7 @@ fi
 
 log "Creating VM '$name' ($cpu CPU, $memory MiB RAM, $disk GiB disk)"
 utm_osascript '
-            set vmConfig to {name:(item 1 of argv), os:macOS, macRecoveryIpsw:(POSIX file (item 2 of argv)), cpu cores:((item 3 of argv) as integer), memory:((item 4 of argv) as integer), drives:{{guest size:((item 5 of argv) as integer)}}}
+            set vmConfig to {name:(item 1 of argv), os:macOS, macRecoveryIpsw:((item 2 of argv) as POSIX file), cpu cores:((item 3 of argv) as integer), memory:((item 4 of argv) as integer), drives:{{guest size:((item 5 of argv) as integer)}}}
             make new virtual machine with properties {backend:apple, configuration:vmConfig}' \
     "$name" "$ipsw_path" "$cpu" "$memory" "$((disk * 1024))" >/dev/null
 

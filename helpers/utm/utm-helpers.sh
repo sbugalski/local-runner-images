@@ -134,7 +134,9 @@ host_macos_major() {
     sw_vers -productVersion | cut -d. -f1
 }
 
-# Runs an AppleScript against UTM. Arguments after the script are passed to `on run argv`
+# Runs an AppleScript against UTM. Arguments after the script are passed to `on run argv`.
+# Turn path arguments into files with `(item N of argv) as POSIX file`: inside the
+# tell block `POSIX file (item N of argv)` is sent to UTM, which fails with -1728
 utm_osascript() {
     local script=$1
     shift

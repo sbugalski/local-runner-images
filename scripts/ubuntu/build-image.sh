@@ -161,7 +161,7 @@ hdiutil makehybrid -quiet -iso -joliet -default-volume-name cidata -o "$work_dir
 
 log "Creating VM '$name' ($cpu CPU, $memory MiB RAM, $disk GiB disk)"
 utm_osascript '
-            set vmConfig to {name:(item 1 of argv), os:linux, cpu cores:((item 4 of argv) as integer), memory:((item 5 of argv) as integer), drives:{{source:(POSIX file (item 2 of argv))}, {source:(POSIX file (item 3 of argv))}}}
+            set vmConfig to {name:(item 1 of argv), os:linux, cpu cores:((item 4 of argv) as integer), memory:((item 5 of argv) as integer), drives:{{source:((item 2 of argv) as POSIX file)}, {source:((item 3 of argv) as POSIX file)}}}
             make new virtual machine with properties {backend:apple, configuration:vmConfig}' \
     "$name" "$work_dir/disk.img" "$work_dir/seed.iso" "$cpu" "$memory" >/dev/null
 # UTM copied the drives into the VM bundle
@@ -190,7 +190,7 @@ build_succeeded=true
 if [[ -n "$export_path" ]]; then
     log "Exporting '$name' to $export_path"
     mkdir -p "$(dirname "$export_path")"
-    utm_osascript 'export (virtual machine named (item 1 of argv)) to (POSIX file (item 2 of argv))' \
+    utm_osascript 'export (virtual machine named (item 1 of argv)) to ((item 2 of argv) as POSIX file)' \
         "$name" "$(cd "$(dirname "$export_path")" && pwd)/$(basename "$export_path")"
 fi
 
