@@ -206,7 +206,21 @@ UTM_VM_PASSWORD='choose-a-password' ./scripts/run-ephemeral-runner.sh \
     --ssh-key ~/.ssh/utm-runner-images --labels ubuntu-24.04-arm64
 ```
 
-Every runner gets the labels `self-hosted`, `macOS` or `Linux`, and `ARM64`, plus the ones in `--labels`. Target them in a workflow with, for example, `runs-on: [self-hosted, macos-26-arm64]`. `--jobs COUNT` stops after `COUNT` jobs; without it the script runs until you stop it with Ctrl+C, which also removes the clone and the unused runner registration.
+Every runner gets the labels `self-hosted`, `macOS` or `Linux`, and `ARM64`, plus the ones in `--labels`. Target them in a workflow with, for example, `runs-on: [self-hosted, macos-26-arm64]`.
+
+How the script ends a runner:
+
+| Case | What happens |
+| ---- | ------------ |
+| The job finishes | The clone and the runner registration are deleted and the next clone starts. `--jobs COUNT` stops the script after `COUNT` jobs |
+| No job arrives | The runner waits as long as needed. With `--idle-timeout MIN`, the script deletes the runner and the clone after `MIN` minutes without a job and stops. GitHub does not delete a runner that has just been given a job, so such a job still runs |
+| The job runs too long | GitHub cancels it after the timeout of the job, 360 minutes by default. With `--job-timeout MIN`, the script stops the clone after `MIN` minutes of the job, and GitHub marks the job as failed |
+| The SSH connection drops | Nothing: the runner runs detached in the guest, and the script checks it every 30 seconds. Only when the guest does not answer for 10 minutes does the script consider it dead and delete the clone |
+| The clone stops or crashes | The script deletes the clone and the registration and starts the next clone |
+| You press Ctrl+C | The script deletes the clone and the registration and stops |
+| The script is killed (`kill -9`, host restart) | The clone stays in UTM. On the next start the script lists the clones of the image that were left behind, with the commands to delete them; it does not delete them itself, because another instance of the script may use them |
+
+When a runner does not finish normally, the script prints the last lines of the runner log from the guest.
 
 `GITHUB_TOKEN` must be allowed to manage the self-hosted runners of the repository: a fine-grained personal access token for that repository with **Administration: Read and write**, or a classic token with the `repo` scope.
 

@@ -6,6 +6,8 @@
 ##         just-in-time runner that takes one job and then unregisters itself,
 ##         and deletes the clone afterwards, so every job starts from a clean
 ##         system. The image VM itself is never started.
+##         The runner runs detached in the guest, so a dropped SSH connection
+##         does not end the job; the script polls the runner and the GitHub API.
 ##  Usage: see docs/create-image-utm.md or run with --help
 ################################################################################
 
@@ -27,6 +29,9 @@ Options:
   --labels LIST        Additional comma-separated runner labels. Every runner gets
                        self-hosted, macOS or Linux, and ARM64
   --jobs COUNT         Stop after COUNT jobs (default: 0, run until interrupted)
+  --idle-timeout MIN   Stop when a runner gets no job for MIN minutes (default: 0, wait forever)
+  --job-timeout MIN    Stop a job that runs longer than MIN minutes and fail it
+                       (default: 0, only the timeout of the job on GitHub applies)
   --runner-group ID    Runner group ID (default: 1, the Default group)
   -h, --help           Show this help
 
@@ -40,6 +45,12 @@ EOF
 
 jobs=0
 runner_group=1
+idle_timeout=0
+job_timeout=0
+
+POLL_SECONDS=30
+# A guest that does not answer SSH for this long is considered dead
+UNREACHABLE_SECONDS=600
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -49,6 +60,8 @@ while [[ $# -gt 0 ]]; do
         --ssh-key) ssh_key=$2; shift 2 ;;
         --labels) extra_labels=$2; shift 2 ;;
         --jobs) jobs=$2; shift 2 ;;
+        --idle-timeout) idle_timeout=$2; shift 2 ;;
+        --job-timeout) job_timeout=$2; shift 2 ;;
         --runner-group) runner_group=$2; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         *) usage >&2; fail "Unknown argument '$1'" ;;
@@ -58,7 +71,9 @@ done
 [[ -n "$vm" && -n "$repo" && -n "$username" ]] || { usage >&2; fail "--vm, --repo and --username are required"; }
 [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "--repo must look like OWNER/REPO"
 [[ -z "$extra_labels" || "$extra_labels" =~ ^[A-Za-z0-9_.-]+(,[A-Za-z0-9_.-]+)*$ ]] || fail "--labels must be a comma-separated list of names"
-[[ "$jobs" =~ ^[0-9]+$ && "$runner_group" =~ ^[0-9]+$ ]] || fail "--jobs and --runner-group must be numbers"
+for number in "$jobs" "$runner_group" "$idle_timeout" "$job_timeout"; do
+    [[ "$number" =~ ^[0-9]+$ ]] || fail "--jobs, --runner-group, --idle-timeout and --job-timeout must be whole numbers"
+done
 [[ -n "$GITHUB_TOKEN" ]] || fail "Set GITHUB_TOKEN to a token that can manage the runners of $repo"
 if [[ -n "$ssh_key" ]]; then
     [[ -f "$ssh_key" ]] || fail "SSH key '$ssh_key' not found"
@@ -73,6 +88,16 @@ done
 vm_exists "$vm" || fail "VM '$vm' not found in UTM"
 [[ "$(vm_status "$vm")" == "stopped" ]] || fail "VM '$vm' must be stopped, clones are made from its disk"
 
+# Clones left behind by a run that could not clean up, e.g. after kill -9 or a
+# host restart. Another instance of this script may still use them, so only warn
+leftovers=$("$UTMCTL" list | awk -v prefix="$vm-runner-" 'NR > 1 && index($3, prefix) == 1 { print $3 }')
+if [[ -n "$leftovers" ]]; then
+    log "Found runner clones of '$vm' from earlier runs. Unless another instance of this script uses them, delete them with:"
+    for leftover in $leftovers; do
+        echo "    $UTMCTL stop $leftover --force; $UTMCTL delete $leftover" >&2
+    done
+fi
+
 work_dir=$(mktemp -d)
 cache_dir="$HOME/Library/Caches/local-runner-images/actions-runner"
 mkdir -p "$cache_dir"
@@ -83,7 +108,7 @@ chmod 600 "$work_dir/auth-header"
 
 # All clones share the host keys of the image but can get different addresses,
 # so known_hosts entries would only cause mismatches
-ssh_options=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ServerAliveInterval=30)
+ssh_options=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR -o ConnectTimeout=15 -o ServerAliveInterval=30)
 if [[ -n "$ssh_key" ]]; then
     ssh_options+=(-i "$ssh_key" -o IdentitiesOnly=yes -o BatchMode=yes)
 else
@@ -140,11 +165,7 @@ runner_id=""
 # assigns a just-in-time runner a single job, so its registration is no longer
 # needed afterwards, even if GitHub has not removed it yet
 remove_job() {
-    if [[ -n "$runner_id" ]]; then
-        # Fails harmlessly when GitHub has already removed the runner
-        github_api DELETE "/repos/$repo/actions/runners/$runner_id" >/dev/null 2>&1 || true
-        runner_id=""
-    fi
+    # Stop the VM first: GitHub does not delete a runner that still runs a job
     if [[ -n "$clone" ]] && vm_exists "$clone"; then
         log "Removing VM '$clone'"
         "$UTMCTL" stop "$clone" --force >/dev/null 2>&1 || true
@@ -153,6 +174,65 @@ remove_job() {
         "$UTMCTL" delete "$clone" || true
     fi
     clone=""
+    if [[ -n "$runner_id" ]]; then
+        # Fails harmlessly when GitHub has already removed the runner
+        github_api DELETE "/repos/$repo/actions/runners/$runner_id" >/dev/null 2>&1 || true
+        runner_id=""
+    fi
+}
+
+# Prints true or false for the busy state of the current runner, or nothing
+# when the API does not answer or the runner is gone
+runner_busy() {
+    local response
+    response=$(github_api GET "/repos/$repo/actions/runners/$runner_id" 2>/dev/null) || return 0
+    echo "$response" > "$work_dir/runner.json"
+    plutil -extract busy raw -o - "$work_dir/runner.json" 2>/dev/null || true
+}
+
+# Waits for the detached runner in the guest and prints how it ended:
+# finished:<exit code>, idle, job-timeout, unreachable or vm-stopped
+watch_runner() {
+    local started now busy exit_code busy_since="" unreachable_since=""
+    started=$(date +%s)
+    while sleep "$POLL_SECONDS"; do
+        now=$(date +%s)
+        if [[ "$(vm_status "$clone" 2>/dev/null)" != "started" ]]; then
+            echo vm-stopped
+            return
+        fi
+
+        # '|| true' in the guest, so the exit status of ssh only reflects the connection
+        if exit_code=$(guest_ssh 'cat ~/actions-runner/exit-code 2>/dev/null || true' 2>/dev/null); then
+            unreachable_since=""
+            if [[ -n "$exit_code" ]]; then
+                echo "finished:$exit_code"
+                return
+            fi
+        else
+            unreachable_since=${unreachable_since:-$now}
+            if (( now - unreachable_since >= UNREACHABLE_SECONDS )); then
+                echo unreachable
+                return
+            fi
+        fi
+
+        busy=$(runner_busy)
+        if [[ "$busy" == "true" ]]; then
+            busy_since=${busy_since:-$now}
+            if (( job_timeout > 0 && now - busy_since >= job_timeout * 60 )); then
+                echo job-timeout
+                return
+            fi
+        elif [[ -z "$busy_since" ]] && (( idle_timeout > 0 && now - started >= idle_timeout * 60 )); then
+            # GitHub refuses to delete a runner with a job, so a job that was
+            # assigned in the meantime keeps running
+            if github_api DELETE "/repos/$repo/actions/runners/$runner_id" >/dev/null 2>&1; then
+                echo idle
+                return
+            fi
+        fi
+    done
 }
 
 cleanup() {
@@ -191,12 +271,23 @@ run_job() {
     scp -q "${ssh_options[@]}" "$(runner_archive "$runner_os")" "$username@$ip:actions-runner.tar.gz"
     guest_ssh 'mkdir -p ~/actions-runner && tar -xzf ~/actions-runner.tar.gz -C ~/actions-runner && rm ~/actions-runner.tar.gz'
 
-    # A login shell loads the environment the image sets up for the runner user
+    # Detached with nohup, so the runner outlives the SSH session that starts
+    # it; a login shell loads the environment the image sets up for the account
+    guest_ssh "cd ~/actions-runner && nohup bash -lc './run.sh --jitconfig $jit_config; echo \$? > exit-code' > runner.log 2>&1 < /dev/null &"
     log "Runner '$clone' is waiting for a job in $repo (labels: $labels)"
-    if guest_ssh "bash -lc 'cd ~/actions-runner && ./run.sh --jitconfig $jit_config'"; then
-        log "Runner '$clone' finished its job"
-    else
-        log "Runner '$clone' exited with an error"
+
+    outcome=$(watch_runner)
+    case "$outcome" in
+        finished:0) log "Runner '$clone' finished its job" ;;
+        finished:*) log "Runner '$clone' exited with code ${outcome#finished:}" ;;
+        idle) log "Runner '$clone' got no job within $idle_timeout minutes" ;;
+        job-timeout) log "The job on '$clone' ran longer than $job_timeout minutes and is stopped" ;;
+        unreachable) log "Runner '$clone' did not answer over SSH for $((UNREACHABLE_SECONDS / 60)) minutes" ;;
+        vm-stopped) log "VM '$clone' stopped before its runner finished" ;;
+    esac
+    if [[ "$outcome" != "finished:0" && "$outcome" != "idle" ]]; then
+        log "Last lines of the runner log:"
+        guest_ssh 'tail -n 20 ~/actions-runner/runner.log' >&2 2>/dev/null || true
     fi
     remove_job
 }
@@ -204,5 +295,9 @@ run_job() {
 completed=0
 while (( jobs == 0 || completed < jobs )); do
     run_job
+    if [[ "$outcome" == "idle" ]]; then
+        log "Stopping, no job arrived for $idle_timeout minutes"
+        break
+    fi
     completed=$((completed + 1))
 done
