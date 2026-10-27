@@ -139,7 +139,8 @@ The script builds `ubuntu-slim:test` for `linux/amd64` and runs `images/ubuntu-s
 
 - **x64 images** (macOS x64, Ubuntu x64, Windows Server 2022 and 2025). UTM can only emulate x64 on Apple silicon. An image build installs tens of GB of software and would take days under emulation
 - **macOS on an Intel Mac.** UTM supports macOS guests only on Apple silicon
-- **Windows 11 arm64.** UTM can run it with the QEMU backend, but the templates depend on Azure for more than the VM: they rely on the Azure image (drivers, WinRM over HTTPS), and they end with Sysprep `/generalize /oobe`, which leaves a local VM at the first-run setup screen. Building it locally needs an unattended install, VirtIO drivers and changes to the build steps, which these scripts do not cover
+- **Windows 11 arm64.** UTM can run it with the QEMU backend, but the templates depend on Azure for more than the VM: they rely on the Azure image (drivers, WinRM over HTTPS), and they end with Sysprep `/generalize /oobe`, which leaves a local VM at the first-run setup screen.
+  Building it locally needs an unattended install, VirtIO drivers and changes to the build steps, which these scripts do not cover
 
 ## Run the images
 
