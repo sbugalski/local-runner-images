@@ -110,7 +110,7 @@ vm_mac_address() {
 # Looks up the IPv4 address of a VM in the vmnet DHCP leases. The leases file
 # stores MAC octets without leading zeros, e.g. 2:a:3f:...
 ip_from_dhcp_leases() {
-    local mac=$1 leases=/var/db/dhcpd_leases
+    local mac=$1 leases=${2:-/var/db/dhcpd_leases}
     [[ -r "$leases" ]] || return 0
     mac=$(echo "$mac" | tr 'A-F' 'a-f' | sed -E 's/(^|:)0([0-9a-f])/\1\2/g')
     awk -v mac="1,$mac" '
