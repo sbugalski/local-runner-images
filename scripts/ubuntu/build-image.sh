@@ -11,7 +11,7 @@
 set -o pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-source "$SCRIPT_DIR/../../../helpers/utm/utm-helpers.sh"
+source "$SCRIPT_DIR/../../helpers/utm/utm-helpers.sh"
 
 usage() {
     cat <<EOF
@@ -159,7 +159,7 @@ ip=$(start_vm_and_wait_ssh "$name")
 log "VM is reachable at $ip"
 
 template_dir=$("$SCRIPT_DIR/generate-template.sh" "$build_name")
-mkdir -p "$SCRIPT_DIR/../../image-output"
+mkdir -p "$SCRIPT_DIR/../../images/image-output"
 cd "$template_dir"
 start_vm_watchdog "$name"
 packer build \
@@ -182,4 +182,4 @@ if [[ -n "$export_path" ]]; then
 fi
 
 log "Image '$name' is ready in UTM. Connect with: ssh -i $ssh_key $username@<ip>"
-log "Software report: $(cd "$SCRIPT_DIR/../../image-output" && pwd)/"
+log "Software report: $(cd "$SCRIPT_DIR/../../images/image-output" && pwd)/"

@@ -7,9 +7,9 @@ on:
     branches: [ main ]
     paths:
       - 'helpers/utm/**'
+      - 'scripts/**'
       - 'images/macos/**'
       - 'images/ubuntu/**'
-      - 'images/ubuntu-slim/build-macos.sh'
       - '.github/workflows/utm.yml'
 
 jobs:
@@ -21,14 +21,12 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v5
 
-      # SC2096: the shebang with several options is required by images.CI/shebang-linter.ps1
+      # SC2096: the scripts keep the macOS shebang required by images.CI/shebang-linter.ps1
       - name: Run ShellCheck
         run: |
-          shellcheck -x -P SCRIPTDIR -P SCRIPTDIR/.. -P SCRIPTDIR/../../../helpers/utm -s bash -e SC2096 \
+          shellcheck -x -P SCRIPTDIR -s bash -e SC2096 \
             helpers/utm/*.sh helpers/utm/tests/*.sh \
-            images/macos/utm/*.sh \
-            images/ubuntu/utm/*.sh \
-            images/ubuntu-slim/build-macos.sh
+            scripts/macos/*.sh scripts/ubuntu/*.sh scripts/ubuntu-slim/*.sh
 
   unit-tests:
     name: Unit tests (bash 3.2)
@@ -55,7 +53,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Validate base VM template
-        working-directory: images/macos/utm
+        working-directory: scripts/macos
         run: packer validate -var vm_host=192.168.64.2 -var vm_username=runner base-vm.pkr.hcl
 
       # Same variables as build-image.sh passes, so a new required variable upstream fails here
@@ -88,7 +86,7 @@ jobs:
           ssh-keygen -q -t ed25519 -N "" -f "$RUNNER_TEMP/utm-key"
           for build in ubuntu-22_04-arm64 ubuntu-24_04-arm64 ubuntu-26_04-arm64; do
             echo "Validating $build"
-            template_dir=$(images/ubuntu/utm/generate-template.sh "$build")
+            template_dir=$(scripts/ubuntu/generate-template.sh "$build")
             packer validate \
               -var utm_vm_host=192.168.64.2 \
               -var utm_vm_username=runner \

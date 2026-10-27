@@ -2,7 +2,7 @@
 ################################################################################
 ##  File:  utm-helpers.sh
 ##  Desc:  Helper functions to drive UTM virtual machines from the macOS host.
-##         Sourced by the scripts in images/macos/utm and images/ubuntu/utm.
+##         Sourced by the scripts in scripts/macos and scripts/ubuntu.
 ##         Written for the bash 3.2 that ships with macOS.
 ################################################################################
 

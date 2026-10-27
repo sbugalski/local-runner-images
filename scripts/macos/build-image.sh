@@ -8,8 +8,8 @@
 ################################################################################
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-TEMPLATES_DIR=$(cd "$SCRIPT_DIR/../templates" && pwd)
-source "$SCRIPT_DIR/../../../helpers/utm/utm-helpers.sh"
+TEMPLATES_DIR=$(cd "$SCRIPT_DIR/../../images/macos/templates" && pwd)
+source "$SCRIPT_DIR/../../helpers/utm/utm-helpers.sh"
 
 usage() {
     cat <<EOF

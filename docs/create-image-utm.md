@@ -4,9 +4,9 @@ The templates in this repository build images on Azure (Ubuntu, Windows) and wit
 
 | Image                                                   | How                         | Scripts                  |
 | ------------------------------------------------------- | --------------------------- | ------------------------ |
-| macOS 14, 15, 26 arm64, Xcode 27 arm64                  | macOS VM in UTM             | `images/macos/utm`       |
-| Ubuntu 22.04, 24.04, 26.04 arm64                        | Linux VM in UTM             | `images/ubuntu/utm`      |
-| `ubuntu-slim`                                           | Docker container            | `images/ubuntu-slim`     |
+| macOS 14, 15, 26 arm64, Xcode 27 arm64                  | macOS VM in UTM             | `scripts/macos`          |
+| Ubuntu 22.04, 24.04, 26.04 arm64                        | Linux VM in UTM             | `scripts/ubuntu`         |
+| `ubuntu-slim`                                           | Docker container            | `scripts/ubuntu-slim`    |
 | macOS and Ubuntu x64, Windows                           | Not supported, see [Unsupported images](#unsupported-images) | |
 
 In every case the install scripts, tests and software reports come from the same templates the hosted images use. The scripts only replace the parts that are tied to Azure or Anka: creating the VM and connecting to it.
@@ -46,7 +46,7 @@ Download an IPSW restore image for the macOS version of the image. Apple publish
 ```bash
 export UTM_VM_PASSWORD='choose-a-password'
 
-./images/macos/utm/create-base-vm.sh \
+./scripts/macos/create-base-vm.sh \
     --name macos-26-base \
     --ipsw ~/Downloads/UniversalMac_26.x_Restore.ipsw \
     --username runner
@@ -59,7 +59,7 @@ The script installs macOS and then needs you twice in the UTM window:
 1. **Setup Assistant.** Create an administrator account with the short name and password you passed, turn on **System Settings > General > Sharing > Remote Login**, and shut down the VM. With `--auto-setup` the script creates the account and turns on Remote Login itself, but this requires macOS 27 or later on both the host and the guest
 2. **recoveryOS.** The script boots the VM into recoveryOS. Open **Utilities > Terminal**, run `csrutil disable`, confirm, and shut down the VM. The image scripts write to the system TCC database and unload system daemons, which System Integrity Protection blocks
 
-The script waits until the VM shuts down after each step. Finally it connects over SSH, allows passwordless `sudo` for the account and turns off sleep (`images/macos/utm/configure-base-vm.sh`), then shuts the VM down. Keep the base VM; each build starts from a clone of it.
+The script waits until the VM shuts down after each step. Finally it connects over SSH, allows passwordless `sudo` for the account and turns off sleep (`scripts/macos/configure-base-vm.sh`), then shuts the VM down. Keep the base VM; each build starts from a clone of it.
 
 ### Step 2: Provide Xcode
 
@@ -79,7 +79,7 @@ Download the archives from [Apple Developer](https://developer.apple.com/downloa
 export UTM_VM_PASSWORD='choose-a-password'
 export GITHUB_API_PAT='<optional token, avoids GitHub API rate limits>'
 
-./images/macos/utm/build-image.sh \
+./scripts/macos/build-image.sh \
     --image macos-26-arm64 \
     --base-vm macos-26-base \
     --username runner \
@@ -90,7 +90,7 @@ The script clones the base VM to `--name` (default `<image>-<timestamp>`), start
 
 ## Ubuntu images
 
-The Ubuntu templates only define an `azure-arm` source, so `images/ubuntu/utm/generate-template.sh` writes a copy of the build file to `images/ubuntu/.utm-template` (ignored by git) with three changes:
+The Ubuntu templates only define an `azure-arm` source, so `scripts/ubuntu/generate-template.sh` writes a copy of the build file to `images/ubuntu/.utm-template` (ignored by git) with three changes:
 
 - the build uses a `null` source that connects to the UTM VM over SSH
 - the final `waagent -force -deprovision+user` is dropped. It needs the Azure agent and would delete the build user
@@ -101,7 +101,7 @@ The script fails when an upstream change to the template makes this rewrite inco
 Additional requirement: `qemu-img` from `brew install qemu`. UTM's Apple Virtualization backend needs a raw disk, and the script converts the Ubuntu cloud image with it.
 
 ```bash
-./images/ubuntu/utm/build-image.sh --image ubuntu-24.04-arm64
+./scripts/ubuntu/build-image.sh --image ubuntu-24.04-arm64
 ```
 
 | `--image`            | Template                             |
@@ -130,7 +130,7 @@ Requirements: a Docker engine with the `docker` CLI (Docker Desktop, OrbStack or
 
 ```bash
 export GITHUB_TOKEN='<optional token, avoids GitHub API rate limits>'
-./images/ubuntu-slim/build-macos.sh
+./scripts/ubuntu-slim/build-macos.sh
 ```
 
 The script builds `ubuntu-slim:test` for `linux/amd64` and runs `images/ubuntu-slim/test.sh` against it. Pass another image name as the first argument to tag the image differently.

@@ -26,7 +26,7 @@ if ! command -v numfmt >/dev/null 2>&1; then
 fi
 
 export DOCKER_DEFAULT_PLATFORM=linux/amd64
-cd "$SCRIPT_DIR"
+cd "$SCRIPT_DIR/../../images/ubuntu-slim"
 
 if [[ "$image_name" != "ubuntu-slim:test" ]]; then
     # test.sh builds only its default image name, so build other names here

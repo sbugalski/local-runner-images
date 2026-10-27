@@ -15,9 +15,9 @@
 set -o pipefail
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-TEMPLATES_DIR=$(cd "$SCRIPT_DIR/../templates" && pwd)
+TEMPLATES_DIR=$(cd "$SCRIPT_DIR/../../images/ubuntu/templates" && pwd)
 # A sibling of templates/, so ${path.root}/../scripts still resolves
-OUTPUT_DIR="$SCRIPT_DIR/../.utm-template"
+OUTPUT_DIR="$TEMPLATES_DIR/../.utm-template"
 
 build_name=$1
 build_file="$TEMPLATES_DIR/build.$build_name.pkr.hcl"
