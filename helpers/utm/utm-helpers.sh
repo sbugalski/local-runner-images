@@ -255,10 +255,12 @@ stop_vm_watchdog() {
     fi
 }
 
-# Starts a VM and prints its IP address once SSH accepts connections
+# Starts VM $1, with further arguments passed to utmctl start (e.g. --disposable),
+# and prints its IP address once SSH accepts connections
 start_vm_and_wait_ssh() {
     local name=$1 ip
-    "$UTMCTL" start "$name" >&2
+    shift
+    "$UTMCTL" start "$name" "$@" >&2
     wait_vm_status "$name" "started" 300
     ip=$(wait_vm_ip "$name")
     wait_ssh "$ip"

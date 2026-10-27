@@ -2,10 +2,13 @@
 ################################################################################
 ##  File:  run-ephemeral-runner.sh
 ##  Desc:  Runs GitHub Actions jobs of a repository on a runner image in UTM.
-##         For every job it clones the image VM, starts the clone, registers a
-##         just-in-time runner that takes one job and then unregisters itself,
-##         and deletes the clone afterwards, so every job starts from a clean
-##         system. The image VM itself is never started.
+##         Every job gets a clean system and a just-in-time runner that takes
+##         that one job:
+##         - clone mode (default): clones the image VM, runs the job in the
+##           clone and deletes it. The image VM itself is never started
+##         - disposable mode: starts the image VM with 'utmctl start
+##           --disposable', which discards all changes when the VM stops.
+##           Needs macOS 27 or later on the host
 ##         The runner runs detached in the guest, so a dropped SSH connection
 ##         does not end the job; the script polls the runner and the GitHub API.
 ##  Usage: see docs/create-image-utm.md or run with --help
@@ -19,11 +22,17 @@ usage() {
 Usage: $(basename "$0") --vm NAME --repo OWNER/REPO --username USER [options]
 
 Required:
-  --vm NAME            Image VM in UTM built by build-image.sh. It stays stopped and unchanged
+  --vm NAME            Image VM in UTM built by build-image.sh. Its disk stays unchanged
   --repo OWNER/REPO    Repository to register the runners to
   --username USER      Account in the guest
 
 Options:
+  --mode MODE          How every job gets a clean system:
+                       clone (default): a copy-on-write clone of the image per job.
+                         Works on any host, and several instances of this script
+                         can serve the same image
+                       disposable: runs the image VM itself without saving changes.
+                         Needs macOS 27 or later on the host, one runner per image
   --ssh-key PATH       Private SSH key of the account (Ubuntu images). Without it,
                        the password in UTM_VM_PASSWORD is used (macOS images)
   --labels LIST        Additional comma-separated runner labels. Every runner gets
@@ -43,6 +52,7 @@ Environment:
 EOF
 }
 
+mode=clone
 jobs=0
 runner_group=1
 idle_timeout=0
@@ -55,6 +65,7 @@ UNREACHABLE_SECONDS=600
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --vm) vm=$2; shift 2 ;;
+        --mode) mode=$2; shift 2 ;;
         --repo) repo=$2; shift 2 ;;
         --username) username=$2; shift 2 ;;
         --ssh-key) ssh_key=$2; shift 2 ;;
@@ -70,6 +81,7 @@ done
 
 [[ -n "$vm" && -n "$repo" && -n "$username" ]] || { usage >&2; fail "--vm, --repo and --username are required"; }
 [[ "$repo" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || fail "--repo must look like OWNER/REPO"
+[[ "$mode" == "clone" || "$mode" == "disposable" ]] || fail "--mode must be clone or disposable"
 [[ -z "$extra_labels" || "$extra_labels" =~ ^[A-Za-z0-9_.-]+(,[A-Za-z0-9_.-]+)*$ ]] || fail "--labels must be a comma-separated list of names"
 for number in "$jobs" "$runner_group" "$idle_timeout" "$job_timeout"; do
     [[ "$number" =~ ^[0-9]+$ ]] || fail "--jobs, --runner-group, --idle-timeout and --job-timeout must be whole numbers"
@@ -86,16 +98,26 @@ for tool in curl git ssh scp plutil nc; do
     assert_command "$tool"
 done
 vm_exists "$vm" || fail "VM '$vm' not found in UTM"
-[[ "$(vm_status "$vm")" == "stopped" ]] || fail "VM '$vm' must be stopped, clones are made from its disk"
 
-# Clones left behind by a run that could not clean up, e.g. after kill -9 or a
-# host restart. Another instance of this script may still use them, so only warn
-leftovers=$("$UTMCTL" list | awk -v prefix="$vm-runner-" 'NR > 1 && index($3, prefix) == 1 { print $3 }')
-if [[ -n "$leftovers" ]]; then
-    log "Found runner clones of '$vm' from earlier runs. Unless another instance of this script uses them, delete them with:"
-    for leftover in $leftovers; do
-        echo "    $UTMCTL stop $leftover --force; $UTMCTL delete $leftover" >&2
-    done
+if [[ "$mode" == "disposable" ]]; then
+    # UTM runs Apple Virtualization VMs without saving changes only on macOS 27 or later
+    (( $(host_macos_major) >= 27 )) || fail "--mode disposable needs macOS 27 or later on the host, this Mac runs macOS $(sw_vers -productVersion). Use --mode clone"
+    # A disposable run discards its changes when it stops, so a VM left running by
+    # an interrupted run can simply be stopped
+    [[ "$(vm_status "$vm")" == "stopped" ]] \
+        || fail "VM '$vm' must be stopped. If an interrupted run left it running, stop it with: $UTMCTL stop $vm --force"
+else
+    [[ "$(vm_status "$vm")" == "stopped" ]] || fail "VM '$vm' must be stopped, clones are made from its disk"
+
+    # Clones left behind by a run that could not clean up, e.g. after kill -9 or a
+    # host restart. Another instance of this script may still use them, so only warn
+    leftovers=$("$UTMCTL" list | awk -v prefix="$vm-runner-" 'NR > 1 && index($3, prefix) == 1 { print $3 }')
+    if [[ -n "$leftovers" ]]; then
+        log "Found runner clones of '$vm' from earlier runs. Unless another instance of this script uses them, delete them with:"
+        for leftover in $leftovers; do
+            echo "    $UTMCTL stop $leftover --force; $UTMCTL delete $leftover" >&2
+        done
+    fi
 fi
 
 work_dir=$(mktemp -d)
@@ -158,22 +180,30 @@ runner_version=$(echo "$tags" | awk '{ sub("refs/tags/", "", $2); print $2 }' | 
 [[ -n "$runner_version" ]] || fail "Could not find the newest release of actions/runner"
 log "Using actions/runner $runner_version"
 
-clone=""
+# The VM that runs the current job: a clone, or the image VM in disposable mode
+job_vm=""
+runner_name=""
 runner_id=""
 
-# Deletes the runner registration and the clone of the current job. GitHub
-# assigns a just-in-time runner a single job, so its registration is no longer
-# needed afterwards, even if GitHub has not removed it yet
+# Ends the current job: stops its VM, which discards a disposable run, deletes
+# a clone, and deletes the runner registration. GitHub assigns a just-in-time
+# runner a single job, so its registration is no longer needed afterwards, even
+# if GitHub has not removed it yet
 remove_job() {
     # Stop the VM first: GitHub does not delete a runner that still runs a job
-    if [[ -n "$clone" ]] && vm_exists "$clone"; then
-        log "Removing VM '$clone'"
-        "$UTMCTL" stop "$clone" --force >/dev/null 2>&1 || true
+    if [[ -n "$job_vm" ]] && vm_exists "$job_vm"; then
+        "$UTMCTL" stop "$job_vm" --force >/dev/null 2>&1 || true
         # subshell, because fail() would exit before the VM is deleted
-        (wait_vm_status "$clone" "stopped" 60) || true
-        "$UTMCTL" delete "$clone" || true
+        (wait_vm_status "$job_vm" "stopped" 60) || true
+        # Never delete the image VM itself
+        if [[ "$mode" == "clone" && "$job_vm" != "$vm" ]]; then
+            log "Removing VM '$job_vm'"
+            "$UTMCTL" delete "$job_vm" || true
+        else
+            log "Stopped VM '$job_vm', its changes are discarded"
+        fi
     fi
-    clone=""
+    job_vm=""
     if [[ -n "$runner_id" ]]; then
         # Fails harmlessly when GitHub has already removed the runner
         github_api DELETE "/repos/$repo/actions/runners/$runner_id" >/dev/null 2>&1 || true
@@ -197,7 +227,7 @@ watch_runner() {
     started=$(date +%s)
     while sleep "$POLL_SECONDS"; do
         now=$(date +%s)
-        if [[ "$(vm_status "$clone" 2>/dev/null)" != "started" ]]; then
+        if [[ "$(vm_status "$job_vm" 2>/dev/null)" != "started" ]]; then
             echo vm-stopped
             return
         fi
@@ -243,23 +273,30 @@ trap cleanup EXIT
 trap 'exit 130' INT TERM
 
 run_job() {
-    clone="$vm-runner-$(date +%Y%m%d%H%M%S)"
-    log "Cloning '$vm' to '$clone'"
-    "$UTMCTL" clone "$vm" --name "$clone"
-    vm_exists "$clone" || fail "Cloning '$vm' failed"
-    ip=$(start_vm_and_wait_ssh "$clone")
+    runner_name="$vm-runner-$(date +%Y%m%d%H%M%S)"
+    if [[ "$mode" == "clone" ]]; then
+        job_vm=$runner_name
+        log "Cloning '$vm' to '$job_vm'"
+        "$UTMCTL" clone "$vm" --name "$job_vm"
+        vm_exists "$job_vm" || fail "Cloning '$vm' failed"
+        ip=$(start_vm_and_wait_ssh "$job_vm")
+    else
+        job_vm=$vm
+        log "Starting '$vm' without saving changes"
+        ip=$(start_vm_and_wait_ssh "$job_vm" --disposable)
+    fi
 
     local runner_os os_label
     case "$(guest_ssh uname -s)" in
         Darwin) runner_os=osx; os_label=macOS ;;
         Linux) runner_os=linux; os_label=Linux ;;
-        *) fail "Unsupported guest operating system in '$clone'" ;;
+        *) fail "Unsupported guest operating system in '$job_vm'" ;;
     esac
 
     local labels="self-hosted,$os_label,ARM64${extra_labels:+,$extra_labels}"
     local body response jit_config
     body=$(printf '{"name":"%s","runner_group_id":%s,"labels":["%s"],"work_folder":"_work"}' \
-        "$clone" "$runner_group" "${labels//,/\",\"}")
+        "$runner_name" "$runner_group" "${labels//,/\",\"}")
     response=$(github_api POST "/repos/$repo/actions/runners/generate-jitconfig" "$body") \
         || fail "Could not register a runner in $repo: $response"
     echo "$response" > "$work_dir/jit.json"
@@ -274,16 +311,16 @@ run_job() {
     # Detached with nohup, so the runner outlives the SSH session that starts
     # it; a login shell loads the environment the image sets up for the account
     guest_ssh "cd ~/actions-runner && nohup bash -lc './run.sh --jitconfig $jit_config; echo \$? > exit-code' > runner.log 2>&1 < /dev/null &"
-    log "Runner '$clone' is waiting for a job in $repo (labels: $labels)"
+    log "Runner '$runner_name' is waiting for a job in $repo (labels: $labels)"
 
     outcome=$(watch_runner)
     case "$outcome" in
-        finished:0) log "Runner '$clone' finished its job" ;;
-        finished:*) log "Runner '$clone' exited with code ${outcome#finished:}" ;;
-        idle) log "Runner '$clone' got no job within $idle_timeout minutes" ;;
-        job-timeout) log "The job on '$clone' ran longer than $job_timeout minutes and is stopped" ;;
-        unreachable) log "Runner '$clone' did not answer over SSH for $((UNREACHABLE_SECONDS / 60)) minutes" ;;
-        vm-stopped) log "VM '$clone' stopped before its runner finished" ;;
+        finished:0) log "Runner '$runner_name' finished its job" ;;
+        finished:*) log "Runner '$runner_name' exited with code ${outcome#finished:}" ;;
+        idle) log "Runner '$runner_name' got no job within $idle_timeout minutes" ;;
+        job-timeout) log "The job on '$runner_name' ran longer than $job_timeout minutes and is stopped" ;;
+        unreachable) log "Runner '$runner_name' did not answer over SSH for $((UNREACHABLE_SECONDS / 60)) minutes" ;;
+        vm-stopped) log "VM '$job_vm' stopped before its runner finished" ;;
     esac
     if [[ "$outcome" != "finished:0" && "$outcome" != "idle" ]]; then
         log "Last lines of the runner log:"

@@ -188,10 +188,17 @@ ssh -i ~/.ssh/utm-runner-images runner@<ip>
 
 `scripts/run-ephemeral-runner.sh` serves the jobs of one repository from an image VM, with a clean system for every job:
 
-1. It clones the image VM (an APFS copy-on-write clone, so it takes seconds and almost no disk space) and starts the clone
+1. It starts a VM with the unchanged image, as a clone or as a disposable run, see the table below
 2. It asks the GitHub API for a [just-in-time runner configuration](https://docs.github.com/en/rest/actions/self-hosted-runners). A just-in-time runner is ephemeral: GitHub assigns it a single job. After the job the script also deletes the runner registration
-3. It copies the newest [actions/runner](https://github.com/actions/runner) release into the guest and starts the runner over SSH. The images do not contain the runner application, so the script downloads it once into `~/Library/Caches/local-runner-images/actions-runner`
-4. When the job is done, it deletes the clone and starts again with a new one
+3. It copies the newest [actions/runner](https://github.com/actions/runner) release into the guest and starts the runner over SSH, detached from the SSH session. The images do not contain the runner application, so the script downloads it once into `~/Library/Caches/local-runner-images/actions-runner`
+4. When the job is done, it stops the VM, deletes the clone, and starts again
+
+`--mode` chooses how every job gets a clean system:
+
+| `--mode` | How | Host | Runners per image |
+| -------- | --- | ---- | ----------------- |
+| `clone` (default) | Clones the image VM for every job and deletes the clone afterwards. An APFS clone is copy-on-write, so it takes seconds and almost no disk space. The image VM is never started | Any macOS version UTM supports | As many as you start instances of the script |
+| `disposable` | Starts the image VM itself with `utmctl start --disposable`, which writes changes to a temporary layer that UTM discards when the VM stops | macOS 27 or later. UTM runs Apple Virtualization VMs without saving changes only there, and the script checks the version | One, because a VM can run only once at a time |
 
 ```bash
 export GITHUB_TOKEN='<token that can manage the runners of the repository>'
@@ -212,13 +219,13 @@ How the script ends a runner:
 
 | Case | What happens |
 | ---- | ------------ |
-| The job finishes | The clone and the runner registration are deleted and the next clone starts. `--jobs COUNT` stops the script after `COUNT` jobs |
+| The job finishes | The VM is stopped, the clone and the runner registration are deleted, and the next VM starts. `--jobs COUNT` stops the script after `COUNT` jobs |
 | No job arrives | The runner waits as long as needed. With `--idle-timeout MIN`, the script deletes the runner and the clone after `MIN` minutes without a job and stops. GitHub does not delete a runner that has just been given a job, so such a job still runs |
 | The job runs too long | GitHub cancels it after the timeout of the job, 360 minutes by default. With `--job-timeout MIN`, the script stops the clone after `MIN` minutes of the job, and GitHub marks the job as failed |
 | The SSH connection drops | Nothing: the runner runs detached in the guest, and the script checks it every 30 seconds. Only when the guest does not answer for 10 minutes does the script consider it dead and delete the clone |
-| The clone stops or crashes | The script deletes the clone and the registration and starts the next clone |
-| You press Ctrl+C | The script deletes the clone and the registration and stops |
-| The script is killed (`kill -9`, host restart) | The clone stays in UTM. On the next start the script lists the clones of the image that were left behind, with the commands to delete them; it does not delete them itself, because another instance of the script may use them |
+| The VM stops or crashes | The script deletes the registration (and the clone) and starts the next VM |
+| You press Ctrl+C | The script stops the VM, deletes the clone and the registration, and stops |
+| The script is killed (`kill -9`, host restart) | In `clone` mode the clone stays in UTM. On the next start the script lists the clones of the image that were left behind, with the commands to delete them; it does not delete them itself, because another instance of the script may use them. In `disposable` mode the image VM keeps running until you stop it |
 
 When a runner does not finish normally, the script prints the last lines of the runner log from the guest.
 
@@ -226,10 +233,10 @@ When a runner does not finish normally, the script prints the last lines of the 
 
 Notes:
 
-- One script runs one runner at a time. Start the script several times for parallel runners, as far as the Mac has CPU and memory for the VMs
+- One script runs one runner at a time. For parallel runners, start the script several times in `clone` mode, as far as the Mac has CPU and memory for the VMs
 - The runner runs in the SSH session of the guest account, not in its GUI session. Jobs that need the GUI session, such as some UI tests on macOS, may not work
-- Clones of an image share its host name and SSH host keys. The script does not check the host keys of the clones, which only run on the local UTM network
-- On a macOS 27 host, `utmctl start --disposable` runs a macOS VM without saving changes to its disk, an alternative to cloning when you run a VM by hand
+- Every job VM has the host name and SSH host keys of the image. The script does not check host keys, since the VMs only run on the local UTM network
+- In `disposable` mode, a script killed during a job leaves the image VM running. Stop it with `utmctl stop <vm> --force`; the changes of the run are discarded
 
 > [!NOTE]
 > Apple's macOS license allows at most two additional macOS VMs per Mac, for development and testing and similar purposes. Check the license terms before you run macOS VMs as shared CI infrastructure.
