@@ -161,7 +161,7 @@ Requirements: a Docker engine with the `docker` CLI (Docker Desktop, OrbStack or
 
 ```bash
 export GITHUB_TOKEN='<optional token, avoids GitHub API rate limits>'
-./scripts/ubuntu-slim/build-macos.sh
+./scripts/ubuntu-slim/build-image.sh
 ```
 
 The script builds `ubuntu-slim:<release version>` for `linux/amd64` and runs `images/ubuntu-slim/test.sh` of the release against it. Pass `--name` to tag the image differently.

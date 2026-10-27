@@ -1,6 +1,6 @@
 #!/bin/bash -e
 ################################################################################
-##  File:  build-macos.sh
+##  File:  build-image.sh
 ##  Desc:  Builds and tests the ubuntu-slim container image on a macOS host.
 ##         The image only supports linux/amd64 (several tools are downloaded as
 ##         amd64 binaries), so on Apple silicon it is built under emulation.
