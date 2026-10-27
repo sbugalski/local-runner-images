@@ -184,19 +184,38 @@ UTMCTL=/Applications/UTM.app/Contents/MacOS/utmctl
 ssh -i ~/.ssh/utm-runner-images runner@<ip>
 ```
 
-For a clean environment on every run, clone the image before each job and delete the clone afterwards:
+### Run the images as ephemeral GitHub Actions runners
+
+`scripts/run-ephemeral-runner.sh` serves the jobs of one repository from an image VM, with a clean system for every job:
+
+1. It clones the image VM (an APFS copy-on-write clone, so it takes seconds and almost no disk space) and starts the clone
+2. It asks the GitHub API for a [just-in-time runner configuration](https://docs.github.com/en/rest/actions/self-hosted-runners). A just-in-time runner is ephemeral: GitHub assigns it a single job. After the job the script also deletes the runner registration
+3. It copies the newest [actions/runner](https://github.com/actions/runner) release into the guest and starts the runner over SSH. The images do not contain the runner application, so the script downloads it once into `~/Library/Caches/local-runner-images/actions-runner`
+4. When the job is done, it deletes the clone and starts again with a new one
 
 ```bash
-"$UTMCTL" clone ubuntu-24.04-arm64-202610271200 --name job-1
-"$UTMCTL" start job-1
-# ... run the job over SSH ...
-"$UTMCTL" stop job-1 --request
-"$UTMCTL" delete job-1
+export GITHUB_TOKEN='<token that can manage the runners of the repository>'
+
+# macOS image, password login
+UTM_VM_PASSWORD='choose-a-password' ./scripts/run-ephemeral-runner.sh \
+    --vm macos-26-arm64-20261021.0445 --repo OWNER/REPO --username runner --labels macos-26-arm64
+
+# Ubuntu image, SSH key login
+./scripts/run-ephemeral-runner.sh \
+    --vm ubuntu-24.04-arm64-20261026.166 --repo OWNER/REPO --username runner \
+    --ssh-key ~/.ssh/utm-runner-images --labels ubuntu-24.04-arm64
 ```
 
-On a macOS 27 host, `utmctl start --disposable` runs a macOS VM without saving changes to its disk, which avoids the clone.
+Every runner gets the labels `self-hosted`, `macOS` or `Linux`, and `ARM64`, plus the ones in `--labels`. Target them in a workflow with, for example, `runs-on: [self-hosted, macos-26-arm64]`. `--jobs COUNT` stops after `COUNT` jobs; without it the script runs until you stop it with Ctrl+C, which also removes the clone and the unused runner registration.
 
-To use a VM as a GitHub Actions runner, install the runner application in the guest as described in [Adding self-hosted runners](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/adding-self-hosted-runners).
+`GITHUB_TOKEN` must be allowed to manage the self-hosted runners of the repository: a fine-grained personal access token for that repository with **Administration: Read and write**, or a classic token with the `repo` scope.
+
+Notes:
+
+- One script runs one runner at a time. Start the script several times for parallel runners, as far as the Mac has CPU and memory for the VMs
+- The runner runs in the SSH session of the guest account, not in its GUI session. Jobs that need the GUI session, such as some UI tests on macOS, may not work
+- Clones of an image share its host name and SSH host keys. The script does not check the host keys of the clones, which only run on the local UTM network
+- On a macOS 27 host, `utmctl start --disposable` runs a macOS VM without saving changes to its disk, an alternative to cloning when you run a VM by hand
 
 > [!NOTE]
 > Apple's macOS license allows at most two additional macOS VMs per Mac, for development and testing and similar purposes. Check the license terms before you run macOS VMs as shared CI infrastructure.

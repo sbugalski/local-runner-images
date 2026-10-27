@@ -83,6 +83,14 @@ assert_equal "explicit full tag is kept" \
 assert_equal "a tag of another image is rejected" \
     "rejected" "$( (resolve_image_tag "macos-26-arm64" "ubuntu24-arm64/20261026.166" 2>/dev/null) || echo rejected)"
 
+runner_tags="v2.338.2
+v2.338.10
+v2.99.0
+v3.0.0-beta.1
+latest"
+assert_equal "newest runner version compares numerically and skips pre-releases" \
+    "2.338.10" "$(echo "$runner_tags" | select_latest_runner_version)"
+
 set_source_repo ""
 assert_equal "tags come from the fork by default" "$FORK_REPO" "$SOURCE_REPO"
 set_source_repo upstream

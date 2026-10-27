@@ -29,6 +29,8 @@ Because the default branch does not always build, the scripts build the newest r
 | Ubuntu Slim | Docker container, built for amd64 under emulation | [`scripts/ubuntu-slim`](scripts/ubuntu-slim) |
 | x64 images and Windows | Not supported | |
 
+To use a built image as a self-hosted runner, [`scripts/run-ephemeral-runner.sh`](scripts/run-ephemeral-runner.sh) registers ephemeral runners to a repository and runs every job on a fresh clone of the image.
+
 See [Build and run runner images locally with UTM](docs/create-image-utm.md) for requirements, step-by-step instructions and the reasons some images are not supported.
 
 ## Available Images

@@ -60,6 +60,11 @@ set_source_repo() {
     esac
 }
 
+# Reads tags of actions/runner from stdin and prints the newest runner version, e.g. 2.338.2
+select_latest_runner_version() {
+    sed -n -E 's/^v([0-9]+\.[0-9]+\.[0-9]+)$/\1/p' | sort -t. -k1,1n -k2,2n -k3,3n | tail -n 1 || true
+}
+
 # Prints the release tag to build for image $1: $2 when given, with or without
 # the image prefix, otherwise the newest release tag in SOURCE_REPO
 resolve_image_tag() {

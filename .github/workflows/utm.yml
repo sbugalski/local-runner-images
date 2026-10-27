@@ -26,7 +26,7 @@ jobs:
         run: |
           shellcheck -x -P SCRIPTDIR -s bash -e SC2096 \
             helpers/utm/*.sh helpers/utm/tests/*.sh \
-            scripts/macos/*.sh scripts/ubuntu/*.sh scripts/ubuntu-slim/*.sh
+            scripts/*.sh scripts/macos/*.sh scripts/ubuntu/*.sh scripts/ubuntu-slim/*.sh
 
   unit-tests:
     name: Unit tests (bash 3.2)
