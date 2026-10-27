@@ -50,7 +50,6 @@ jobs:
         source: [checkout, latest-release]
     env:
       SOURCE_KIND: ${{ matrix.source }}
-      SOURCE_CACHE_DIR: ${{ runner.temp }}/sources
       PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       PKR_VAR_vm_password: validate
       PKR_VAR_github_api_pat: ''
@@ -68,6 +67,7 @@ jobs:
       # Same variables as build-image.sh passes, so a new required variable upstream fails here
       - name: Validate image templates
         run: |
+          export SOURCE_CACHE_DIR="$RUNNER_TEMP/sources"
           source helpers/utm/utm-helpers.sh
           set_source_repo upstream
           for image in "macos-14-arm64 macOS-14.arm64.anka.pkr.hcl" "macos-15-arm64 macOS-15.arm64.anka.pkr.hcl" \
@@ -95,7 +95,6 @@ jobs:
         source: [checkout, latest-release]
     env:
       SOURCE_KIND: ${{ matrix.source }}
-      SOURCE_CACHE_DIR: ${{ runner.temp }}/sources
 
     steps:
       - name: Checkout Repository
@@ -104,6 +103,7 @@ jobs:
       # Same steps and variables as build-image.sh, so upstream template changes that break the rewrite fail here
       - name: Generate and validate templates
         run: |
+          export SOURCE_CACHE_DIR="$RUNNER_TEMP/sources"
           source helpers/utm/utm-helpers.sh
           set_source_repo upstream
           ssh-keygen -q -t ed25519 -N "" -f "$RUNNER_TEMP/utm-key"
