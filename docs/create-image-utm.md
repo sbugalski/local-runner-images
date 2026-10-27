@@ -134,6 +134,7 @@ The Ubuntu templates only define an `azure-arm` source, so `scripts/ubuntu/gener
 - the build uses a `null` source that connects to the UTM VM over SSH
 - the final `waagent -force -deprovision+user` is dropped. It needs the Azure agent and would delete the build user
 - the software report is downloaded to `images/image-output` of the sources instead of over the committed readme
+- the PowerShell module step (`Install-PowerShellModules.ps1`, `Install-PowerShellAzModules.ps1`) is retried up to 3 times. It downloads dozens of modules from the PowerShell Gallery, where single downloads fail now and then ("Source Location ... is not valid", "failed to download"), and one failure would end the build. Both scripts can run again safely
 
 The script fails when an upstream change to the template makes this rewrite incomplete, rather than build something different from the template.
 
@@ -258,4 +259,5 @@ Notes:
 - **The guest cannot download Xcode from `--xcode-dir`**: the macOS firewall on the host may block `python3`. Allow incoming connections for it or use `--xcode-url`
 - **`Xcode ... checksum mismatch`**: the archive is not the one from the toolset. Download the exact build named in the `version` field
 - **`System Integrity Protection is enabled`**: repeat the recoveryOS step. Start the base VM with `utmctl start <name> --recovery`
+- **A build fails while downloading from the PowerShell Gallery**: the Ubuntu builds retry that step up to 3 times. When it fails 3 times in a row, the PowerShell Gallery is having trouble; start the build again later
 - **`generate-template.sh` reports that a build file changed**: the upstream Ubuntu template changed in a way the rewrite does not cover. Compare the build file with the generated one and update `generate-template.sh`

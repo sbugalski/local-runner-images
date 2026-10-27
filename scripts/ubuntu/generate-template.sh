@@ -8,6 +8,9 @@
 ##         - the final 'waagent -deprovision+user' is dropped, it would delete
 ##           the build user and needs the Azure agent
 ##         - downloaded software reports go to images/image-output
+##         - the PowerShell module step is retried: it downloads dozens of
+##           modules from the PowerShell Gallery, and a single failed download
+##           otherwise ends the build. Both of its scripts can run again
 ##  Usage: generate-template.sh <build name> [source dir]
 ##         <build name> is e.g. ubuntu-24_04-arm64, [source dir] the root of
 ##         the runner-images sources (default: this repository).
@@ -35,15 +38,19 @@ OUTPUT_DIR=$(cd "$OUTPUT_DIR" && pwd)
 
 cp "$TEMPLATES_DIR/variable.ubuntu.pkr.hcl" "$OUTPUT_DIR/"
 
+# The 'a\' command with the text on the next line works with BSD (macOS) and GNU sed
 # shellcheck disable=SC2016 # ${path.root} is HCL and must stay unexpanded
 sed -e 's|source\.azure-arm\.image|source.null.image|' \
     -e 's|/usr/sbin/waagent -force -deprovision+user && ||' \
     -e 's|destination = "${path.root}/\.\./|destination = "${path.root}/../../image-output/|' \
+    -e '/scripts *= .*Install-PowerShellModules\.ps1/a\
+    max_retries      = 3' \
     "$build_file" > "$OUTPUT_DIR/build.$build_name.pkr.hcl"
 
 # Fail loudly when an upstream change makes the rewrite incomplete
 generated="$OUTPUT_DIR/build.$build_name.pkr.hcl"
-if ! grep -q 'source\.null\.image' "$generated" || grep -Eq 'azure-arm|waagent' "$generated"; then
+if ! grep -q 'source\.null\.image' "$generated" || ! grep -q 'max_retries' "$generated" \
+    || grep -Eq 'azure-arm|waagent' "$generated"; then
     echo "ERROR: $build_file changed in a way generate-template.sh does not handle" >&2
     exit 1
 fi
