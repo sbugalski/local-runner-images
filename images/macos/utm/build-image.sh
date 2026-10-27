@@ -83,7 +83,9 @@ build_succeeded=false
 
 cleanup() {
     stop_vm_watchdog
-    [[ -n "$server_pid" ]] && kill "$server_pid" 2>/dev/null || true
+    if [[ -n "$server_pid" ]]; then
+        kill "$server_pid" 2>/dev/null || true
+    fi
     if [[ "$build_succeeded" != true ]] && vm_exists "$name"; then
         if [[ "$keep_on_failure" == true ]]; then
             log "Build failed, VM '$name' is left running for debugging"
