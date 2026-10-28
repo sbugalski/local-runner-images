@@ -163,7 +163,8 @@ The script:
 The account has no password; you log in with the SSH key. Pass `--ssh-key PATH` to use your own key (`PATH.pub` must exist), otherwise the script creates `~/.ssh/utm-runner-images`.
 
 > [!NOTE]
-> The Azure image has the Azure agent and Azure apt mirrors; the cloud image does not. The script writes a stub `/etc/waagent.conf` so `configure-environment.sh` can run, and the apt sources keep pointing at `ports.ubuntu.com`.
+> The Azure image has the Azure agent and Azure apt mirrors; the cloud image does not. The script writes a stub `/etc/waagent.conf` so `configure-environment.sh` can run, For 22.04 and 24.04 the apt sources keep pointing at `ports.ubuntu.com`, as on Azure.
+> From 26.04 arm64 is in the main archive, and the image tests expect the Azure mirror list there, so cloud-init points apt at `azure.archive.ubuntu.com` and `configure-apt-sources.sh` turns it into a mirror list that fails over to the Ubuntu archives.
 
 ## ubuntu-slim
 

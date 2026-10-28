@@ -132,6 +132,19 @@ log "Preparing a ${disk} GiB disk"
 qemu-img convert -f qcow2 -O raw "$cache_dir/$cloud_image" "$work_dir/disk.img"
 qemu-img resize -f raw "$work_dir/disk.img" "${disk}G" >/dev/null
 
+# Azure images point apt at azure.archive.ubuntu.com, which configure-apt-sources.sh
+# turns into a mirror list that fails over to the Ubuntu archives, and the image
+# tests check for that list. 22.04 and 24.04 arm64 stay on ports.ubuntu.com as on
+# Azure, from 26.04 arm64 is in the main archive. cloud-init uses the primary
+# mirror for the security pocket too
+apt_config=""
+if [[ "$release" != "22.04" && "$release" != "24.04" ]]; then
+    apt_config="apt:
+  primary:
+    - arches: [default]
+      uri: http://azure.archive.ubuntu.com/ubuntu/"
+fi
+
 # cloud-init NoCloud seed: any volume labeled 'cidata' is picked up on first boot
 mkdir -p "$work_dir/seed"
 cat > "$work_dir/seed/meta-data" <<EOF
@@ -156,6 +169,7 @@ write_files:
       ResourceDisk.Format=n
       ResourceDisk.EnableSwap=n
       ResourceDisk.SwapSizeMB=0
+$apt_config
 EOF
 hdiutil makehybrid -quiet -iso -joliet -default-volume-name cidata -o "$work_dir/seed.iso" "$work_dir/seed"
 
