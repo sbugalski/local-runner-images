@@ -139,8 +139,11 @@ The Ubuntu templates only define an `azure-arm` source, so `scripts/ubuntu/gener
   Since 2026-10-26 the PowerShell Gallery answers a few percent of requests with 404 ("Unable to resolve package source", "No match was found", "Source Location ... is not valid", see [PowerShell/PowerShellGallery#356](https://github.com/PowerShell/PowerShellGallery/issues/356)).
   Az and Microsoft.Graph pull about a hundred sub-modules each, so one failed request would end almost every build.
   The whole step is also retried up to 3 times; both scripts can run again safely
+- the tests come from a copy of `images/ubuntu/scripts/tests` in which the `All SCSI and NVMe devices have read_ahead_kb set to 128` test is skipped when the VM has no `sd*` or `nvme*n*` disk.
+  Apple Virtualization attaches the disk as VirtIO (`/dev/vda`), which the read-ahead udev rule from `configure-environment.sh` does not cover.
+  The tests for the rule file itself still run
 
-The script fails when an upstream change to the template makes this rewrite incomplete, rather than build something different from the template.
+The script fails when an upstream change to the template or to that test makes this rewrite incomplete, rather than build something different from the template.
 
 Additional requirement: `qemu-img` from `brew install qemu`. UTM's Apple Virtualization backend needs a raw disk, and the script converts the Ubuntu cloud image with it.
 
