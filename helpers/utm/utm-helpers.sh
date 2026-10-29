@@ -237,7 +237,8 @@ wait_ssh() {
 }
 
 # Starts the VM again whenever it is found stopped, until stop_vm_watchdog.
-# Covers guest reboots during the build that end with the VM stopped
+# Covers guest reboots during the build that end with the VM stopped, and the
+# power off that replaces the reboot step of the Ubuntu templates
 start_vm_watchdog() {
     local name=$1
     (

@@ -8,6 +8,11 @@
 ##         - the final 'waagent -deprovision+user' is dropped, it would delete
 ##           the build user and needs the Azure agent
 ##         - downloaded software reports go to images/image-output
+##         - the 'Reboot VM' step powers the VM off instead, and the VM
+##           watchdog of build-image.sh starts it again. After an in-guest
+##           reboot under Apple Virtualization a vCPU of the guest often stops
+##           responding, the other CPUs spin in soft lockups waiting for it
+##           and SSH never comes back. Cold starts do not show this
 ##         - the PowerShell module step runs its scripts through
 ##           Install-PowerShellModulesWithRetry.ps1, which retries every
 ##           PowerShell Gallery call, and the whole step is retried as well
@@ -43,6 +48,7 @@ cp "$TEMPLATES_DIR/variable.ubuntu.pkr.hcl" "$SCRIPT_DIR/Install-PowerShellModul
 sed -e 's|source\.azure-arm\.image|source.null.image|' \
     -e 's|/usr/sbin/waagent -force -deprovision+user && ||' \
     -e 's|destination = "${path.root}/\.\./|destination = "${path.root}/../../image-output/|' \
+    -e "s|\[\"echo 'Reboot VM'\", \"sudo reboot\"\]|[\"echo 'Power off VM, the build script starts it again'\", \"sudo systemctl poweroff\"]|" \
     -e '/scripts *= .*Install-PowerShellModules\.ps1/a\
     max_retries      = 3' \
     -e 's|scripts *= \["${path.root}/\.\./scripts/build/Install-PowerShellModules\.ps1", "${path.root}/\.\./scripts/build/Install-PowerShellAzModules\.ps1"\]|scripts          = ["${path.root}/Install-PowerShellModulesWithRetry.ps1"]|' \
@@ -51,7 +57,8 @@ sed -e 's|source\.azure-arm\.image|source.null.image|' \
 # Fail loudly when an upstream change makes the rewrite incomplete
 generated="$OUTPUT_DIR/build.$build_name.pkr.hcl"
 if ! grep -q 'source\.null\.image' "$generated" || ! grep -q 'max_retries' "$generated" \
-    || grep -Eq 'azure-arm|waagent|scripts/build/Install-PowerShell(Az)?Modules' "$generated"; then
+    || ! grep -q 'sudo systemctl poweroff' "$generated" \
+    || grep -Eq 'azure-arm|waagent|scripts/build/Install-PowerShell(Az)?Modules|reboot' "$generated"; then
     echo "ERROR: $build_file changed in a way generate-template.sh does not handle" >&2
     exit 1
 fi
