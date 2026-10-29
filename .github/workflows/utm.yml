@@ -1,0 +1,86 @@
+# CI Validation
+
+name: UTM build scripts
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'helpers/utm/**'
+      - 'scripts/macos/**'
+      - 'images/macos/**'
+      - '.github/workflows/utm.yml'
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      # SC2096: the scripts keep the macOS shebang required by images.CI/shebang-linter.ps1
+      - name: Run ShellCheck
+        run: |
+          shellcheck -x -P SCRIPTDIR -s bash -e SC2096 \
+            helpers/utm/*.sh helpers/utm/tests/*.sh \
+            scripts/macos/*.sh
+
+  unit-tests:
+    name: Unit tests (bash 3.2)
+    runs-on: macos-15
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      - name: Run helper tests
+        run: /bin/bash helpers/utm/tests/utm-helpers.tests.sh
+
+  # The build scripts use the newest release tag by default, so validate both this checkout and the newest
+  # upstream releases. The fork does not need to carry release tags for CI.
+  packer-validate-macos:
+    name: Validate macOS templates (${{ matrix.source }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        source: [checkout, latest-release]
+    env:
+      SOURCE_KIND: ${{ matrix.source }}
+      PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      PKR_VAR_vm_password: validate
+      PKR_VAR_github_api_pat: ''
+      PKR_VAR_xcode_install_sas: ''
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+
+      - name: Validate base VM template
+        if: matrix.source == 'checkout'
+        working-directory: scripts/macos
+        run: packer validate -var vm_host=192.168.64.2 -var vm_username=runner base-vm.pkr.hcl
+
+      # Same variables as build-image.sh passes, so a new required variable upstream fails here
+      - name: Validate image templates
+        run: |
+          export SOURCE_CACHE_DIR="$RUNNER_TEMP/sources"
+          source helpers/utm/utm-helpers.sh
+          set_source_repo upstream
+          for image in "macos-14-arm64 macOS-14.arm64.anka.pkr.hcl" "macos-15-arm64 macOS-15.arm64.anka.pkr.hcl" \
+                       "macos-26-arm64 macOS-26.arm64.anka.pkr.hcl" "xcode-27-arm64 xcode-27.arm64.anka.pkr.hcl"; do
+            set -- $image
+            resolve_image_source "$1" "" "$([[ $SOURCE_KIND == checkout ]] && echo true || echo false)"
+            cd "$SOURCE_DIR/images/macos/templates"
+            packer init "$2"
+            packer validate \
+              -var builder_type=null \
+              -var source_vm_name=192.168.64.2 \
+              -var build_id=validate \
+              -var vm_username=runner \
+              -var xcode_install_storage_url=http://192.168.64.1:8642/ \
+              "$2"
+            cd "$GITHUB_WORKSPACE"
+          done

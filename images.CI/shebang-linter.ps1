@@ -23,7 +23,8 @@ function Validate-Scripts {
 }
 
 $PathUbuntu = "./images/ubuntu/scripts"
-$PathMacOS = "./images/macos"
+# The UTM build scripts run on a macOS host and follow the macOS convention
+$PathMacOS = @("./images/macos", "./scripts/macos", "./helpers/utm")
 $PatternUbuntu = "#!/bin/bash -e"
 $PatternMacOS = "#!/bin/bash -e -o pipefail"
 $ScriptsWithBrokenShebang = @()
@@ -35,7 +36,7 @@ if ($ScriptsWithBrokenShebang.Length -gt 0) {
         Write-Host "##[error] '$_'"
     }
     Write-Host "`n`n##[error] Expected shebang for scripts in 'images/ubuntu' folder is '$PatternUbuntu'"
-    Write-Host "##[error] Expected shebang for scripts in 'images/macos' folder is '$PatternMacOS'"
+    Write-Host "##[error] Expected shebang for scripts in '$($PathMacOS -join "', '")' folders is '$PatternMacOS'"
     exit 1
     else {
         Write-Host "All scripts have correct shebang."
