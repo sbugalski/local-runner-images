@@ -43,7 +43,7 @@ leases=$(awk '
 done | sort -rn)
 
 [[ -n "$name_filter" ]] && leases=$(echo "$leases" | awk -v name="$name_filter" '$2 == name')
-[[ -n "$leases" ]] || { echo "No leases found${name_filter:+ for '$name_filter'}"; exit 0; }
+[[ -n "$leases" ]] || { echo "No leases found${name_filter:+ for $name_filter}"; exit 0; }
 
 # VMs are rebuilt with new host keys on the same addresses, so known_hosts is not used
 ssh_options=(-i "$ssh_key" -o BatchMode=yes -o ConnectTimeout=10 -o ServerAliveInterval=5 -o ServerAliveCountMax=2
@@ -59,7 +59,7 @@ echo "$leases" | while read -r expiry name ip hw; do
     if output=$(ssh "${ssh_options[@]}" "$username@$ip" \
         'echo "hostname: $(hostname)"; echo "up since: $(uptime -s)"; echo "systemd: $(systemctl is-system-running)"; systemctl list-jobs --no-legend | head -5' \
         </dev/null 2>&1); then
-        echo "$output" | sed 's/^/    /'
+        awk '{ print "    " $0 }' <<< "$output"
     else
         echo "    ssh as $username failed:"
         echo "$output" | tail -n 5 | sed 's/^/    /'
