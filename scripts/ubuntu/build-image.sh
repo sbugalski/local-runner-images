@@ -213,6 +213,12 @@ packer build \
     -var "image_version=${SOURCE_VERSION:-$name}" \
     .
 
+# GitHub adds the runner account to the docker group when it provisions a hosted
+# runner, outside the image. Without it, jobs cannot open /run/docker.sock
+log "Adding '$username' to the docker group"
+ssh -i "$ssh_key" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$username@$ip" "sudo usermod -aG docker $username"
+
 stop_vm_watchdog
 stop_vm "$name"
 build_succeeded=true

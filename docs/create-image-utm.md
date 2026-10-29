@@ -162,7 +162,10 @@ The script:
 1. Downloads the arm64 cloud image from `cloud-images.ubuntu.com`, checks it against `SHA256SUMS` and caches it in `~/Library/Caches/local-runner-images`
 2. Converts it to a raw disk of `--disk` GiB (default 100) and creates a cloud-init seed that adds the account `--username` (default `runner`) with passwordless `sudo` and your SSH key
 3. Creates a Linux VM in UTM with `--cpu` (default 4) and `--memory` MiB (default 16384), starts it and waits for SSH
-4. Runs `packer build` on the generated template and shuts the VM down
+4. Runs `packer build` on the generated template, adds the account to the `docker` group, as GitHub does on hosted runners, and shuts the VM down
+
+> [!NOTE]
+> Images built before the script added the account to the `docker` group fail in jobs with `permission denied while trying to connect to the docker API at unix:///var/run/docker.sock`. Fix such an image once without rebuilding it: start the VM, run `sudo usermod -aG docker runner` over SSH and shut it down. Every clone made afterwards has the group.
 
 To test the build flow without installing the image software, pass `--test-template`. The script then runs the empty `scripts/ubuntu/build.utm-test.pkr.hcl` instead of the image template, with the same null source and variables.
 It checks SSH, powers the VM off as the reboot step does, and checks that the VM came back with a new boot. It takes a few minutes; the VM is named `<image>-utm-test-<date>` unless you pass `--name`.
