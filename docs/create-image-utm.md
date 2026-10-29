@@ -164,7 +164,8 @@ The script:
 3. Creates a Linux VM in UTM with `--cpu` (default 4) and `--memory` MiB (default 16384), starts it and waits for SSH
 4. Runs `packer build` on the generated template and shuts the VM down
 
-To test the build flow without installing the image software, pass `--test-template`. The script then runs the empty `scripts/ubuntu/build.utm-test.pkr.hcl` instead of the image template, with the same null source and variables. It checks SSH, powers the VM off as the reboot step does, and checks that the VM came back with a new boot. It takes a few minutes; the VM is named `<image>-utm-test-<date>` unless you pass `--name`.
+To test the build flow without installing the image software, pass `--test-template`. The script then runs the empty `scripts/ubuntu/build.utm-test.pkr.hcl` instead of the image template, with the same null source and variables.
+It checks SSH, powers the VM off as the reboot step does, and checks that the VM came back with a new boot. It takes a few minutes; the VM is named `<image>-utm-test-<date>` unless you pass `--name`.
 
 ```bash
 ./scripts/ubuntu/build-image.sh --image ubuntu-26.04-arm64 --test-template
@@ -271,7 +272,9 @@ Notes:
 - **No IP address**: the scripts read it from `utmctl ip-address` and from `/var/db/dhcpd_leases`. Check that the VM network mode is **Shared Network** and that the guest finished booting
 - **Packer loses the VM after a reboot (`Timeout during SSH handshake`)**: run `scripts/probe-vm-ssh.sh` (optionally `--name ubuntu-26-04-arm64`). It tries SSH on every address in `/var/db/dhcpd_leases`, newest lease first, and prints whether port 22 is open, whether login works and what systemd is still starting
 - **The VM stops during the build**: some guest reboots end with the VM stopped. The build scripts start it again while Packer runs, so Packer reconnects after the reboot
-- **An Ubuntu VM hangs after a reboot, with the UTM process at 100% CPU per core and no SSH**: after a reboot inside the guest, Apple Virtualization often leaves one vCPU unresponsive. The guest journal shows `soft lockup` and `rcu_preempt detected stalls` messages. The Ubuntu builds therefore replace the reboot step of the template with a power off, and the build script starts the VM again from cold. To recover such a VM, run `utmctl stop <vm> --force` and `utmctl start <vm>`. Use a power off and a start instead of `sudo reboot` in the guest
+- **An Ubuntu VM hangs after a reboot, with the UTM process at 100% CPU per core and no SSH**: after a reboot inside the guest, Apple Virtualization often leaves one vCPU unresponsive. The guest journal shows `soft lockup` and `rcu_preempt detected stalls` messages.
+  The Ubuntu builds therefore replace the reboot step of the template with a power off, and the build script starts the VM again from cold.
+  To recover such a VM, run `utmctl stop <vm> --force` and `utmctl start <vm>`. Use a power off and a start instead of `sudo reboot` in the guest
 - **A build fails**: the VM is deleted. Pass `--keep-on-failure` to keep it running and connect over SSH to investigate
 - **The guest cannot download Xcode from `--xcode-dir`**: the macOS firewall on the host may block `python3`. Allow incoming connections for it or use `--xcode-url`
 - **`Xcode ... checksum mismatch`**: the archive is not the one from the toolset. Download the exact build named in the `version` field
