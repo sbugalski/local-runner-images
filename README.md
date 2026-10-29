@@ -16,6 +16,25 @@
 This repository contains the source code used to create the VM images for [GitHub-hosted runners](https://docs.github.com/en/actions/using-github-hosted-runners/about-github-hosted-runners) used for Actions, as well as for [Microsoft-hosted agents](https://docs.microsoft.com/en-us/azure/devops/pipelines/agents/hosted?view=azure-devops#use-a-microsoft-hosted-agent) used for Azure Pipelines.
 To build a VM machine from this repo's source, see the [instructions](docs/create-image-and-azure-resources.md).
 
+### About this fork
+
+This is a fork of [actions/runner-images](https://github.com/actions/runner-images) that adds local builds: you can build the runner images on your own Apple silicon Mac, without Azure or Anka, and run them as VMs in [UTM](https://mac.getutm.app/).
+The local builds use the upstream image templates, install scripts and tests; only the steps that create the VM and connect to it are replaced (for Ubuntu, through a generated copy of the template without the Azure-specific steps). The same tests run during the local build as on the hosted images.
+Because the default branch does not always build, the scripts build the newest release tag of each image by default, taken from this fork or, with `--repo upstream`, from actions/runner-images.
+
+| Image | Local build | Scripts |
+| ----- | ----------- | ------- |
+| macOS 14, 15, 26 arm64 and Xcode 27 arm64 | macOS VM in UTM | [`scripts/macos`](scripts/macos) |
+| Ubuntu 22.04, 24.04, 26.04 arm64 | Linux VM in UTM | [`scripts/ubuntu`](scripts/ubuntu) |
+| Ubuntu Slim | Docker container, built for amd64 under emulation | [`scripts/ubuntu-slim`](scripts/ubuntu-slim) |
+| x64 images and Windows | Not supported | |
+
+To use a built image as a self-hosted runner, [`scripts/run-ephemeral-runner.sh`](scripts/run-ephemeral-runner.sh) registers ephemeral runners to a repository and runs every job on a fresh clone of the image.
+
+[`scripts/install-prerequisites.sh`](scripts/install-prerequisites.sh) installs the software the scripts need on the Mac.
+
+See [Build and run runner images locally with UTM](docs/create-image-utm.md) for requirements, step-by-step instructions and the reasons some images are not supported.
+
 ## Available Images
 
 | Image | Architecture | YAML Label | Included Software |

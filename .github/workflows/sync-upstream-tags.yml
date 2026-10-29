@@ -1,0 +1,50 @@
+# Copies the release tags of the images that scripts/ can build from
+# actions/runner-images to this fork. GitHub does not copy new upstream tags
+# into a fork, and the build scripts take the newest release tag from the fork.
+
+name: Sync upstream release tags
+
+on:
+  schedule:
+    - cron: '17 5 * * *'  # Daily at 05:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync-tags:
+    name: Sync release tags
+    runs-on: ubuntu-24.04
+    if: github.repository != 'actions/runner-images'
+    env:
+      UPSTREAM_REPO: https://github.com/actions/runner-images.git
+      # Release tag prefixes, see scripts/*/build-*.sh
+      IMAGES: >-
+        macos-14-arm64 macos-15-arm64 macos-26-arm64 xcode-27-arm64
+        ubuntu22-arm64 ubuntu24-arm64 ubuntu26-arm64 ubuntu-slim
+
+    steps:
+      # GITHUB_TOKEN cannot push commits that change files in .github/workflows, which new upstream
+      # commits often do. Store a token with the 'workflow' scope as TAGS_SYNC_TOKEN for those
+      - name: Checkout Repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.TAGS_SYNC_TOKEN || github.token }}
+
+      - name: Fetch upstream release tags
+        run: |
+          git remote add upstream "$UPSTREAM_REPO"
+          for image in $IMAGES; do
+            git fetch --no-tags upstream "refs/tags/$image/*:refs/tags/$image/*"
+          done
+
+      # Pushes only the tags the fork does not have yet
+      - name: Push release tags to the fork
+        run: |
+          refspecs=()
+          for image in $IMAGES; do
+            refspecs+=("refs/tags/$image/*:refs/tags/$image/*")
+          done
+          git push origin "${refspecs[@]}"
