@@ -259,6 +259,7 @@ Notes:
 
 - **`utmctl failed`**: start the script from Terminal in the GUI session and allow Terminal to control UTM in **System Settings > Privacy & Security > Automation**
 - **No IP address**: the scripts read it from `utmctl ip-address` and from `/var/db/dhcpd_leases`. Check that the VM network mode is **Shared Network** and that the guest finished booting
+- **Packer loses the VM after a reboot (`Timeout during SSH handshake`)**: run `scripts/probe-vm-ssh.sh` (optionally `--name ubuntu-26-04-arm64`). It tries SSH on every address in `/var/db/dhcpd_leases`, newest lease first, and prints whether port 22 is open, whether login works and what systemd is still starting
 - **The VM stops during the build**: some guest reboots end with the VM stopped. The build scripts start it again while Packer runs, so Packer reconnects after the reboot
 - **A build fails**: the VM is deleted. Pass `--keep-on-failure` to keep it running and connect over SSH to investigate
 - **The guest cannot download Xcode from `--xcode-dir`**: the macOS firewall on the host may block `python3`. Allow incoming connections for it or use `--xcode-url`
