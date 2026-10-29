@@ -129,11 +129,12 @@ The script clones the base VM to `--name` (default `<image>-<release version>`),
 
 ## Ubuntu images
 
-The Ubuntu templates only define an `azure-arm` source, so `scripts/ubuntu/generate-template.sh` writes a copy of the build file to `images/ubuntu/.utm-template` (ignored by git) with three changes:
+The Ubuntu templates only define an `azure-arm` source, so `scripts/ubuntu/generate-template.sh` writes a copy of the build file to `images/ubuntu/.utm-template` (ignored by git) with these changes:
 
 - the build uses a `null` source that connects to the UTM VM over SSH
 - the final `waagent -force -deprovision+user` is dropped. It needs the Azure agent and would delete the build user
 - the software report is downloaded to `images/image-output` of the sources instead of over the committed readme
+- the `Reboot VM` step powers the VM off instead, and `build-image.sh` starts it again. A reboot inside the guest often hangs under Apple Virtualization (see [Troubleshooting](#troubleshooting))
 - the PowerShell module step runs `Install-PowerShellModules.ps1` and `Install-PowerShellAzModules.ps1` through `scripts/ubuntu/Install-PowerShellModulesWithRetry.ps1`, which wraps every `Install-Module`, `Update-Module` and `Save-Module` call of those scripts in a retry, up to 10 attempts 30 seconds apart.
   Since 2026-10-26 the PowerShell Gallery answers a few percent of requests with 404 ("Unable to resolve package source", "No match was found", "Source Location ... is not valid", see [PowerShell/PowerShellGallery#356](https://github.com/PowerShell/PowerShellGallery/issues/356)).
   Az and Microsoft.Graph pull about a hundred sub-modules each, so one failed request would end almost every build.
@@ -159,6 +160,12 @@ The script:
 2. Converts it to a raw disk of `--disk` GiB (default 100) and creates a cloud-init seed that adds the account `--username` (default `runner`) with passwordless `sudo` and your SSH key
 3. Creates a Linux VM in UTM with `--cpu` (default 4) and `--memory` MiB (default 16384), starts it and waits for SSH
 4. Runs `packer build` on the generated template and shuts the VM down
+
+To test the build flow without installing the image software, pass `--test-template`. The script then runs the empty `scripts/ubuntu/build.utm-test.pkr.hcl` instead of the image template, with the same null source and variables. It checks SSH, powers the VM off as the reboot step does, and checks that the VM came back with a new boot. It takes a few minutes; the VM is named `<image>-utm-test-<date>` unless you pass `--name`.
+
+```bash
+./scripts/ubuntu/build-image.sh --image ubuntu-26.04-arm64 --test-template
+```
 
 The account has no password; you log in with the SSH key. Pass `--ssh-key PATH` to use your own key (`PATH.pub` must exist), otherwise the script creates `~/.ssh/utm-runner-images`.
 

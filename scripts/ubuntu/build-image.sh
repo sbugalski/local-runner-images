@@ -7,7 +7,8 @@
 ##         through the Packer 'null' builder (see generate-template.sh).
 ##         The template comes from the newest release tag of the image in the
 ##         fork (or the original repository with --repo upstream), unless --tag
-##         or --from-checkout says otherwise.
+##         or --from-checkout says otherwise. --test-template runs an empty
+##         build (build.utm-test.pkr.hcl) instead, to test the flow quickly.
 ##  Usage: see docs/create-image-utm.md or run with --help
 ################################################################################
 
@@ -38,6 +39,10 @@ Options:
   --disk GIB           Disk size in GiB, allocated sparsely (default: 100)
   --export PATH        Export the finished VM as a .utm bundle to PATH
   --keep-on-failure    Leave the VM running when the build fails, for debugging
+  --test-template      Run the empty build.utm-test.pkr.hcl instead of the image
+                       template: tests VM creation, SSH and the power off and
+                       cold start of the reboot step in a few minutes
+                       (default name: <image>-utm-test-<date>)
   -h, --help           Show this help
 EOF
 }
@@ -49,6 +54,7 @@ memory=16384
 disk=100
 keep_on_failure=false
 from_checkout=false
+test_template=false
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -64,6 +70,7 @@ while [[ $# -gt 0 ]]; do
         --disk) disk=$2; shift 2 ;;
         --export) export_path=$2; shift 2 ;;
         --keep-on-failure) keep_on_failure=true; shift ;;
+        --test-template) test_template=true; shift ;;
         -h|--help) usage; exit 0 ;;
         *) usage >&2; fail "Unknown argument '$1'" ;;
     esac
@@ -80,7 +87,11 @@ esac
 
 assert_host
 resolve_image_source "$image_os" "$tag" "$from_checkout"
-name=${name:-$image-${SOURCE_VERSION:-$(date +%Y%m%d%H%M)}}
+if [[ "$test_template" == true ]]; then
+    name=${name:-$image-utm-test-$(date +%Y%m%d%H%M)}
+else
+    name=${name:-$image-${SOURCE_VERSION:-$(date +%Y%m%d%H%M)}}
+fi
 for tool in packer qemu-img hdiutil curl shasum ssh-keygen nc; do
     assert_command "$tool"
 done
@@ -186,6 +197,11 @@ ip=$(start_vm_and_wait_ssh "$name")
 log "VM is reachable at $ip"
 
 template_dir=$("$SCRIPT_DIR/generate-template.sh" "$build_name" "$SOURCE_DIR")
+if [[ "$test_template" == true ]]; then
+    # Keep the null source and the variables, replace only the build
+    rm "$template_dir/build.$build_name.pkr.hcl"
+    cp "$SCRIPT_DIR/build.utm-test.pkr.hcl" "$template_dir/"
+fi
 mkdir -p "$SOURCE_DIR/images/image-output"
 cd "$template_dir"
 start_vm_watchdog "$name"
@@ -209,4 +225,4 @@ if [[ -n "$export_path" ]]; then
 fi
 
 log "Image '$name' is ready in UTM. Connect with: ssh -i $ssh_key $username@<ip>"
-log "Software report: $SOURCE_DIR/images/image-output/"
+[[ "$test_template" == true ]] || log "Software report: $SOURCE_DIR/images/image-output/"

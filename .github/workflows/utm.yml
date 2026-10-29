@@ -119,3 +119,13 @@ jobs:
               -var image_version=validate \
               "$template_dir"
           done
+          # The empty build of build-image.sh --test-template, with the last generated source and variables
+          rm "$template_dir"/build.*.pkr.hcl
+          cp scripts/ubuntu/build.utm-test.pkr.hcl "$template_dir/"
+          packer validate \
+            -var utm_vm_host=192.168.64.2 \
+            -var utm_vm_username=runner \
+            -var "utm_ssh_private_key_file=$RUNNER_TEMP/utm-key" \
+            -var "image_os=$1" \
+            -var image_version=validate \
+            "$template_dir"
