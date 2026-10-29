@@ -255,6 +255,8 @@ start_vm_watchdog() {
 stop_vm_watchdog() {
     if [[ -n "$VM_WATCHDOG_PID" ]]; then
         kill "$VM_WATCHDOG_PID" 2>/dev/null || true
+        # Reaping the job here keeps bash from printing 'Terminated' for it
+        wait "$VM_WATCHDOG_PID" 2>/dev/null || true
         VM_WATCHDOG_PID=""
     fi
 }
